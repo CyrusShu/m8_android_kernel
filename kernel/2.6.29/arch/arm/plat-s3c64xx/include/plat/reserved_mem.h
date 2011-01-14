@@ -18,7 +18,7 @@
 #define RESERVED_PMEM_PREVIEW		(3 * 1024 * 1024)
 #define RESERVED_PMEM_RENDER	  	(6 * 1024 * 1024)	// WVGA : 4, HVGA : 2
 #define RESERVED_PMEM_STREAM		(0 * 1024 * 1024)
-#define RESERVED_G3D			(32 * 1024 * 1024) 	/* G3D is shared with uppper memory areas */
+#define RESERVED_G3D			(52 * 1024 * 1024)	// (32 * 1024 * 1024) 	/* G3D is shared with uppper memory areas */
 #define RESERVED_PMEM_GPU1		(0)
 #define RESERVED_PMEM			(20 * 1024 * 1024)	// WVGA : 20, HVGA : 8 (320*480:800*480=1:2.5)
 #define RESERVED_PMEM_SKIA		(0)
