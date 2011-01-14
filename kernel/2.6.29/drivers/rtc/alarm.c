@@ -65,6 +65,19 @@ static struct hrtimer alarm_timer[ANDROID_ALARM_TYPE_COUNT];
 static struct timespec alarm_time[ANDROID_ALARM_TYPE_COUNT];
 static struct timespec elapsed_rtc_delta;
 
+/* 
+ * see comment in kernel/time.c: warp_clock(), also need to warp alarm on android 
+ * when using init cmd sysclktz, otherwise getting wrong elapsed realtime.
+ * */
+void warp_alarm(void)
+{
+	unsigned long   flags;
+
+	spin_lock_irqsave(&alarm_slock, flags);
+	elapsed_rtc_delta.tv_sec += sys_tz.tz_minuteswest * 60;
+	spin_unlock_irqrestore(&alarm_slock, flags);
+}
+
 static void alarm_start_hrtimer(enum android_alarm_type alarm_type)
 {
 	struct timespec hr_alarm_time;

@@ -138,6 +138,13 @@ static inline void warp_clock(void)
 	xtime.tv_sec += sys_tz.tz_minuteswest * 60;
 	update_xtime_cache(0);
 	write_sequnlock_irq(&xtime_lock);
+
+#ifdef CONFIG_RTC_INTF_ALARM
+	/* warp alarm on android */
+	extern void warp_alarm(void);
+	warp_alarm();
+#endif
+
 	clock_was_set();
 }
 
