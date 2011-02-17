@@ -139,7 +139,8 @@
 
 #endif // LINUX_VERSION_CODE >= KERNEL_VERSION(2,8,0)
 
-unsigned int g_uiFreeMemMap = 0x0;
+typedef uint64_t mem_map_t;
+mem_map_t g_uiFreeMemMap = 0x0;
 
 #define S3C6410_SZ_G3D 		SZ_4K
 
@@ -155,7 +156,7 @@ unsigned int g_uiFreeMemMap = 0x0;
 #define G3D_RESERVED_MEM_ADDR_PHY	G3D_RESERVED_START
 #define G3D_RESERVED_MEM_SIZE		RESERVED_G3D
 
-#define G3D_CHUNK_SIZE SZ_2M
+#define G3D_CHUNK_SIZE SZ_1M
 
 #define G3D_UI_CHUNK_NUM		(RESERVED_G3D_UI / G3D_CHUNK_SIZE)
 
@@ -163,7 +164,7 @@ static int G3D_CHUNK_NUM = -1;
 
 typedef struct __alloc_info {
 	unsigned int    file_desc_id;
-	unsigned int 	uiAllocedMemMap;
+	mem_map_t 	uiAllocedMemMap;
 	struct __alloc_info	*next;
 } alloc_info;
 
@@ -487,10 +488,10 @@ int s3c_g3d_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static unsigned int genMemmapMask(unsigned int uirequestblock)
+static mem_map_t genMemmapMask(unsigned int uirequestblock)
 {
 	int i;
-	unsigned int uiMemMask = 0;
+	mem_map_t uiMemMask = 0;
 
 	for (i = 0 ; i < uirequestblock ; i++)
 {
@@ -511,7 +512,7 @@ void printRemainChunk(void)
 //	printk("Available Count %d\n", j);
 }
 
-void low_memory_killer(unsigned int uiRequsetBlock, unsigned int uiMemMask,unsigned int id)
+void low_memory_killer(unsigned int uiRequsetBlock, mem_map_t uiMemMask, unsigned int id)
 {
 	alloc_info *s_info = alloc_info_head;
 	alloc_info *k_info = NULL;
@@ -574,7 +575,7 @@ unsigned long s3c_g3d_available_chunk_size(unsigned int request_size, unsigned i
 	unsigned int loop_i, loop_j;
 
 	unsigned int uiRequsetBlock = (int)(request_size / G3D_CHUNK_SIZE);
-	unsigned int uiMemMask = genMemmapMask(uiRequsetBlock);
+	mem_map_t uiMemMask = genMemmapMask(uiRequsetBlock);
 
 	int chunk_start_num;
 	int chunk_end_num;
@@ -634,7 +635,7 @@ int check_memStatus(unsigned int id)
 	return 1;
 }
 
-void register_alloc_info(int index,unsigned int uiAllocedMemMap)
+void register_alloc_info(int index, mem_map_t uiAllocedMemMap)
 {
 	unsigned int id = g3d_bootm[index].file_desc_id;
 	alloc_info *s_info = alloc_info_head;
@@ -677,7 +678,7 @@ unsigned long s3c_g3d_reserve_chunk(struct file* filp, unsigned int size)
 	unsigned int loop_i, loop_j;
 
 	unsigned int uiRequsetBlock = (int)(size / G3D_CHUNK_SIZE);
-	unsigned int uiMemMask = genMemmapMask(uiRequsetBlock);
+	mem_map_t uiMemMask = genMemmapMask(uiRequsetBlock);
 
 	int chunk_start_num;
 	int chunk_end_num;
@@ -724,7 +725,7 @@ unsigned long s3c_g3d_reserve_chunk(struct file* filp, unsigned int size)
 	return 0;
 }
 
-void unregister_alloc_info(int index, unsigned int uiAllocedMemMap)
+void unregister_alloc_info(int index, mem_map_t uiAllocedMemMap)
 {
 	unsigned int id = g3d_bootm[index].file_desc_id;
 	alloc_info *s_info = alloc_info_head;
@@ -759,7 +760,7 @@ void unregister_alloc_info(int index, unsigned int uiAllocedMemMap)
 		}
 		else
 		{
-			if (s_info->uiAllocedMemMap & uiAllocedMemMap != uiAllocedMemMap) {
+			if ((s_info->uiAllocedMemMap & uiAllocedMemMap) != uiAllocedMemMap) {
 				printk("unregister_alloc_info err \n");
 				return;
 			}
@@ -783,7 +784,7 @@ void s3c_g3d_release_chunk(unsigned int phy_addr, int size)
 	struct mm_struct *mm = current->mm;
 
 	unsigned int uiRequsetBlock = (int)(size / G3D_CHUNK_SIZE);
-	unsigned int uiMemMask = genMemmapMask(uiRequsetBlock);	
+	mem_map_t uiMemMask = genMemmapMask(uiRequsetBlock);
 
 	for(loop_i = 0; loop_i < G3D_CHUNK_NUM - (uiRequsetBlock - 1); loop_i++ ) {
 		if( g3d_bootm[loop_i].phy_addr == phy_addr ) {
@@ -1359,7 +1360,7 @@ int s3c_g3d_probe(struct platform_device *pdev)
 	__raw_writel(0,s3c_g3d_base+FGGB_RST);
 	for(i=0;i<1000;i++);
 
-	G3D_CHUNK_NUM = G3D_RESERVED_MEM_SIZE /SZ_2M;
+	G3D_CHUNK_NUM = G3D_RESERVED_MEM_SIZE / G3D_CHUNK_SIZE;
 
 	if (g3d_bootm == NULL)
 		g3d_bootm = kmalloc(sizeof(s3c_g3d_bootmem) * G3D_CHUNK_NUM, GFP_KERNEL);	
