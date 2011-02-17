@@ -80,7 +80,7 @@ static void gpio_keys_report_event(struct gpio_button_data *bdata)
 			}
 
 			while (can_combine > 0) { // send pending keys
-				printk("gpio_keys_report_event(send pending):type=%d;state:%d,raw_keycode:%d,keycode:%d\n",type,!state,button->code,keycode);
+				pr_debug("gpio_keys_report_event(send pending):type=%d;state:%d,raw_keycode:%d,keycode:%d\n",type,!state,button->code,keycode);
 				input_event(input, type, keycode, !state);//state其实表示的就是press，1表按下，0表示抬起,先上报1，再上报0(按键动作完成，清除按键事件)，Linux规定的, modified by hui
 				input_sync(input);
 				mdelay(50);
@@ -105,7 +105,7 @@ static void gpio_keys_report_event(struct gpio_button_data *bdata)
 		break;
 	}
 
-	printk("gpio_keys_report_event:type=%d;state:%d,raw_keycode:%d,keycode:%d\n",type,state,button->code,keycode);
+	pr_debug("gpio_keys_report_event:type=%d;state:%d,raw_keycode:%d,keycode:%d\n",type,state,button->code,keycode);
 	input_event(input, type, keycode, !!state);//state其实表示的就是press，1表按下，0表示抬起,先上报1，再上报0(按键动作完成，清除按键事件)，Linux规定的, modified by hui
 	input_sync(input);
 }
@@ -116,7 +116,7 @@ static void gpio_check_button(unsigned long _data)
 	struct gpio_keys_button *button=data->button;
 	int down;
 
-	printk("gpio_check_button:gpio=%d;desc:%s\n",button->gpio,button->desc);
+	pr_debug("gpio_check_button:gpio=%d;desc:%s\n",button->gpio,button->desc);
 
 	down = gpio_get_value(button->gpio);
 
@@ -143,7 +143,7 @@ static irqreturn_t gpio_keys_isr(int irq, void *dev_id)
 
 	down = gpio_get_value(button->gpio);
 	
-	printk("\ngpio_keys_isr:gpio=%d;desc:%s\n",button->gpio,button->desc);
+	pr_debug("\ngpio_keys_isr:gpio=%d;desc:%s\n",button->gpio,button->desc);
 	
 	/* the power button of the ipaq are tricky. They send 'released' events even
 	 * when the button are already released. The work-around is to proceed only
@@ -153,7 +153,7 @@ static irqreturn_t gpio_keys_isr(int irq, void *dev_id)
 	if (button->last_state == down)
 		return IRQ_HANDLED;
 
-	printk("handle key\n");
+	pr_debug("handle key\n");
 	
 	button->last_state = down;
 
