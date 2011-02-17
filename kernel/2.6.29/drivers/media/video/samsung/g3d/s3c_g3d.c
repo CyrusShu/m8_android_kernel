@@ -141,6 +141,7 @@
 
 typedef uint64_t mem_map_t;
 mem_map_t g_uiFreeMemMap = 0x0;
+#define MASK1				((mem_map_t)0x1ull)
 
 #define S3C6410_SZ_G3D 		SZ_4K
 
@@ -181,7 +182,7 @@ void g3d_alloc_info_dump(void)
 	{
 		printk("(ID:0x%x) ",i->file_desc_id);
 		for(j=0;j<G3D_CHUNK_NUM;j++)
-			if(i->uiAllocedMemMap&(1<<j)) printk("1");
+			if(i->uiAllocedMemMap&(MASK1<<j)) printk("1");
 			else printk("0");
 		i=i->next;
 		if(i) printk(" ->");
@@ -195,14 +196,14 @@ static void* Malloc_3D_ChunkMem(unsigned int szReq, int ithMem)
 	unsigned long physicAddr = (G3D_RESERVED_MEM_ADDR_PHY) + (G3D_CHUNK_SIZE * ithMem);
 	void * virtAddr = phys_to_virt((unsigned long)physicAddr);
 
-	g_uiFreeMemMap |=(0x1 << ithMem);
+	g_uiFreeMemMap |= (MASK1 << ithMem);
 	
 	return virtAddr;
 }
 
 static void Free_3D_ChunkMem(void* virtAddr,  int ithMem)
 {	
-	g_uiFreeMemMap &=~(0x1 << ithMem);	
+	g_uiFreeMemMap &= ~(MASK1 << ithMem);
 }
 
 #define G3D_CHUCNK_AVALIABLE	0
@@ -495,7 +496,7 @@ static mem_map_t genMemmapMask(unsigned int uirequestblock)
 
 	for (i = 0 ; i < uirequestblock ; i++)
 {
-		uiMemMask |= (0x1 << i);
+		uiMemMask |= (MASK1 << i);
 	}
 
 	return uiMemMask;
@@ -509,7 +510,7 @@ void printRemainChunk(void)
 			j++;
 			}
 		}
-//	printk("Available Count %d\n", j);
+	printk("Available Count %d\n", j);
 }
 
 void low_memory_killer(unsigned int uiRequsetBlock, mem_map_t uiMemMask, unsigned int id)
@@ -715,7 +716,9 @@ unsigned long s3c_g3d_reserve_chunk(struct file* filp, unsigned int size)
 			g_uiFreeMemMap &= ~(uiMemMask << loop_i); // remove free chunk block at memory map
 			register_alloc_info(loop_i,uiMemMask << loop_i);
 
+#ifdef DEBUG_S3C_G3D
 			printRemainChunk();
+#endif
 			return g3d_bootm[loop_i].phy_addr;
 		}
 	}
@@ -812,7 +815,9 @@ void s3c_g3d_release_chunk(unsigned int phy_addr, int size)
 	if(loop_i >= G3D_CHUNK_NUM)
 		printk("s3c_g3d_release_chunk failed : Cannot find the phys_addr : 0x%p\n", (void*)phy_addr);
 
+#ifdef DEBUG_S3C_G3D
 	printRemainChunk();	
+#endif
 }
 
 static int s3c_g3d_ioctl(struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg)
@@ -1001,13 +1006,13 @@ static int s3c_g3d_ioctl(struct inode *inode, struct file *file, unsigned int cm
 	case S3C_3D_SFR_LOCK:
 		mutex_lock(&mem_sfr_lock);
 		mutex_lock_processID = (unsigned int)file->private_data;
-		DEBUG("s3c_g3d_ioctl() : You got a muxtex lock !!\n");
+		//DEBUG("s3c_g3d_ioctl() : You got a muxtex lock !!\n");
 		break;
 
 	case S3C_3D_SFR_UNLOCK:
 		mutex_lock_processID = 0;
 		mutex_unlock(&mem_sfr_lock);
-		DEBUG("s3c_g3d_ioctl() : The muxtex unlock called !!\n");
+		//DEBUG("s3c_g3d_ioctl() : The muxtex unlock called !!\n");
 		break;
 
 	case S3C_3D_MEM_ALLOC_SHARE:		
