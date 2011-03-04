@@ -411,9 +411,10 @@ static int s3c_rtc_getalarm(struct device *dev, struct rtc_wkalrm *alrm)
 		alm_tm->tm_mon = 0xff;
 	}
 
-	if (alm_en & S3C_RTCALM_YEAREN)
+	if (alm_en & S3C_RTCALM_YEAREN) {
 		alm_tm->tm_year = bcd2bin(alm_tm->tm_year);
-	else
+		alm_tm->tm_year += 86;
+	} else
 		alm_tm->tm_year = 0xffff;
 
 	return 0;
