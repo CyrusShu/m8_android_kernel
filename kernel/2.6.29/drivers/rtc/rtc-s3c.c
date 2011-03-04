@@ -97,14 +97,14 @@ static enum rtc_sync_state   	rtc_sync_state;
 
 static inline int detect_cpu_idle (unsigned int old_idle_tick)
 {
-	unsigned int cpufreq  = cpufreq_get(0);
+	unsigned int cpufreq  = cpufreq_quick_get(0);
 	unsigned int idle_tick = kstat_cpu(0).cpustat.idle + kstat_cpu(0).cpustat.iowait;
 	unsigned int unit_idle_tick = idle_tick - old_idle_tick;
 	int	     state = false;
 	
 	old_idle_tick = idle_tick;
 
-	if (cpufreq == RTC_SYNC_IDLE_CPUFREQ && unit_idle_tick > (RTC_SYNC_DETECT_IDLE_INTERVAL * RTC_SYNC_IDLE_PERCENT / 100))
+	if (cpufreq <= RTC_SYNC_IDLE_CPUFREQ && unit_idle_tick > (RTC_SYNC_DETECT_IDLE_INTERVAL * RTC_SYNC_IDLE_PERCENT / 100))
 	{
 		state = true;
 	}
@@ -230,7 +230,6 @@ static inline void  rtc_sync_start_save_delta ()
 static irqreturn_t s3c_rtc_alarmirq(int irq, void *id)
 {
 	struct rtc_device *rdev = id;
-
 	rtc_update_irq(rdev, 1, RTC_AF | RTC_IRQF);
 
 	s3c_rtc_set_bit_byte(s3c_rtc_base,S3C_INTP,S3C_INTP_ALM);
@@ -241,7 +240,6 @@ static irqreturn_t s3c_rtc_alarmirq(int irq, void *id)
 static irqreturn_t s3c_rtc_tickirq(int irq, void *id)
 {
 	struct rtc_device *rdev = id;
-
 	rtc_update_irq(rdev, 1, RTC_PF | RTC_IRQF);
 
 	s3c_rtc_set_bit_byte(s3c_rtc_base,S3C_INTP,S3C_INTP_TIC);
@@ -593,7 +591,7 @@ static void s3c_rtc_enable(struct platform_device *pdev, int en)
 		return;
 
 	s3c_rtc_enable_set(pdev,base,en);
-		}
+}
 
 static int s3c_rtc_remove(struct platform_device *dev)
 {
@@ -698,7 +696,7 @@ static int s3c_rtc_probe(struct platform_device *pdev)
 	{
 		struct rtc_time tm;
 
-		s3c_rtc_gettime (pdev, &tm);
+		s3c_rtc_gettime (&pdev->dev, &tm);
 		if (rtc_valid_tm (&tm) != 0)
 		{
 			struct rtc_time reset_tm = {
@@ -710,7 +708,7 @@ static int s3c_rtc_probe(struct platform_device *pdev)
 				.tm_year = DEFAULT_RESET_TIME_YEAR - 1900,
 				};
 
-			s3c_rtc_settime (pdev, &reset_tm);
+			s3c_rtc_settime (&pdev->dev, &reset_tm);
 		}
 	}
 #else
