@@ -74,7 +74,20 @@ static bool suspended;
  * */
 void warp_alarm(void)
 {
-	// TODO
+	unsigned long   flags;
+	struct timespec tmp_time;
+
+	spin_lock_irqsave(&alarm_slock, flags);
+
+	tmp_time = ktime_to_timespec(alarms[ANDROID_ALARM_ELAPSED_REALTIME].delta);
+	tmp_time.tv_sec += sys_tz.tz_minuteswest * 60;
+	alarms[ANDROID_ALARM_ELAPSED_REALTIME].delta = timespec_to_ktime(tmp_time);
+
+	tmp_time = ktime_to_timespec(alarms[ANDROID_ALARM_ELAPSED_REALTIME_WAKEUP].delta);
+	tmp_time.tv_sec += sys_tz.tz_minuteswest * 60;
+	alarms[ANDROID_ALARM_ELAPSED_REALTIME_WAKEUP].delta = timespec_to_ktime(tmp_time);
+
+	spin_unlock_irqrestore(&alarm_slock, flags);
 }
 
 static void update_timer_locked(struct alarm_queue *base, bool head_removed)
