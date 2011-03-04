@@ -33,6 +33,7 @@
 
 static struct wake_lock vbus_wake_lock;
 static struct timer_list polling_timer;
+static struct work_struct bat_work;
 
 /* Prototypes */
 extern int s3c_adc_get_adc_data(int channel);
@@ -568,11 +569,23 @@ void s3c_cable_check_status(int flag)
 }
 EXPORT_SYMBOL(s3c_cable_check_status);
 
+static void s3c_bat_work(struct work_struct *work)
+{
+	dev_dbg(dev, "%s\n", __func__);
+
+	s3c_bat_status_update(
+			&s3c_power_supplies[CHARGER_BATTERY]);
+}
+
 #ifdef CONFIG_PM
 static int s3c_bat_suspend(struct platform_device *pdev, 
 		pm_message_t state)
 {
 	dev_info(dev, "%s\n", __func__);
+
+	del_timer_sync(&polling_timer);
+
+	flush_scheduled_work();
 
 	return 0;
 }
@@ -580,6 +593,11 @@ static int s3c_bat_suspend(struct platform_device *pdev,
 static int s3c_bat_resume(struct platform_device *pdev)
 {
 	dev_info(dev, "%s\n", __func__);
+
+	schedule_work(&bat_work);
+
+	mod_timer(&polling_timer,
+		  jiffies + msecs_to_jiffies(10000));
 
 	return 0;
 }
@@ -590,8 +608,7 @@ static int s3c_bat_resume(struct platform_device *pdev)
 
 static void s3c_polling_func(unsigned long unused)
 {
-	s3c_bat_status_update(
-			&s3c_power_supplies[CHARGER_BATTERY]);
+	schedule_work(&bat_work);
 
 	mod_timer(&polling_timer,
 		  jiffies + msecs_to_jiffies(10000));
@@ -619,6 +636,8 @@ static int __devinit s3c_bat_probe(struct platform_device *pdev)
 	s3c_bat_info.bat_info.charging_source = CHARGER_BATTERY;
 	s3c_bat_info.bat_info.charging_enabled = 0;
 	s3c_bat_info.bat_info.batt_health = POWER_SUPPLY_HEALTH_GOOD;
+
+	INIT_WORK(&bat_work, s3c_bat_work);
 
 	/* init power supplier framework */
 	for (i = 0; i < ARRAY_SIZE(s3c_power_supplies); i++) {
