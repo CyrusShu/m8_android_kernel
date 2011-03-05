@@ -322,7 +322,7 @@ static int s3c_rtc_gettime(struct device *dev, struct rtc_time *rtc_tm)
 	rtc_tm->tm_mon = bcd2bin(rtc_tm->tm_mon);
 	rtc_tm->tm_year = bcd2bin(rtc_tm->tm_year);
 
-	rtc_tm->tm_year += 86;
+	rtc_tm->tm_year += 100;
 	rtc_tm->tm_mon -= 1;
 
 	return 0;
@@ -331,7 +331,7 @@ static int s3c_rtc_gettime(struct device *dev, struct rtc_time *rtc_tm)
 static int s3c_rtc_settime(struct device *dev, struct rtc_time *tm)
 {
 	void __iomem *base = s3c_rtc_base;
-	int year = tm->tm_year - 86;
+	int year = tm->tm_year - 100;
 
 	pr_debug("set time %02d.%02d.%02d %02d/%02d/%02d\n",
 		 tm->tm_year, tm->tm_mon, tm->tm_mday,
@@ -413,7 +413,7 @@ static int s3c_rtc_getalarm(struct device *dev, struct rtc_wkalrm *alrm)
 
 	if (alm_en & S3C_RTCALM_YEAREN) {
 		alm_tm->tm_year = bcd2bin(alm_tm->tm_year);
-		alm_tm->tm_year += 86;
+		alm_tm->tm_year += 100;
 	} else
 		alm_tm->tm_year = 0xffff;
 
@@ -426,7 +426,7 @@ static int s3c_rtc_setalarm(struct device *dev, struct rtc_wkalrm *alrm)
 	void __iomem *base = s3c_rtc_base;
 	unsigned int alrm_en;
 
-	int year = tm->tm_year - 86;
+	int year = tm->tm_year - 100;
 
 	pr_debug("s3c_rtc_setalarm: %d, %02x/%02x/%02x %02x.%02x.%02x\n",
 		 alrm->enabled,
