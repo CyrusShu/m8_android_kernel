@@ -49,6 +49,36 @@
 #define DEFAULT_RESET_TIME_SEC	 	(0)
 #endif /* SET_RTC_DEFAULT_RESET_TIME */
 
+
+#ifdef CONFIG_MACH_SMDK6410 /* should be CONFIG_MACH_M8  */
+/* RTC time compatible with WINCE, for multi-boot system */
+#define S3C_RTC_TIME_WINCE_COMPTIBLE
+#endif
+
+#ifdef S3C_RTC_TIME_WINCE_COMPTIBLE
+
+#define YEAR_OFFSET					(1980-1900)
+#define YEAR_BCD2BIN(y)				((y) & 0xff)
+#define YEAR_BIN2BCD(y)				((y) & 0xff)
+
+#define CONVERT_TO_LOCAL_TIME_IF_NEEDED(tm)  do { \
+		unsigned long local_time = 0; \
+		rtc_tm_to_time(tm, &local_time); \
+		local_time -= sys_tz.tz_minuteswest * 60; \
+		rtc_time_to_tm(local_time, tm); \
+	} while (0)
+
+#else
+
+#define YEAR_OFFSET					(100)
+#define YEAR_BCD2BIN(y)				(bcd2bin(y))
+#define YEAR_BIN2BCD(y)				(bin2bcd(y))
+
+#define CONVERT_TO_LOCAL_TIME_IF_NEEDED(tm)  do {} while (0)
+
+#endif
+
+
 /* I have yet to find an S3C implementation with more than one
  * of these rtc blocks in */
 
@@ -319,11 +349,8 @@ static int s3c_rtc_gettime(struct device *dev, struct rtc_time *rtc_tm)
 	rtc_tm->tm_min = bcd2bin(rtc_tm->tm_min);
 	rtc_tm->tm_hour = bcd2bin(rtc_tm->tm_hour);
 	rtc_tm->tm_mday = bcd2bin(rtc_tm->tm_mday);
-	rtc_tm->tm_mon = bcd2bin(rtc_tm->tm_mon);
-	rtc_tm->tm_year = bcd2bin(rtc_tm->tm_year);
-
-	rtc_tm->tm_year += 100;
-	rtc_tm->tm_mon -= 1;
+	rtc_tm->tm_mon = bcd2bin(rtc_tm->tm_mon) - 1;
+	rtc_tm->tm_year = YEAR_BCD2BIN(rtc_tm->tm_year) + YEAR_OFFSET;
 
 	return 0;
 }
@@ -331,7 +358,9 @@ static int s3c_rtc_gettime(struct device *dev, struct rtc_time *rtc_tm)
 static int s3c_rtc_settime(struct device *dev, struct rtc_time *tm)
 {
 	void __iomem *base = s3c_rtc_base;
-	int year = tm->tm_year - 100;
+	int year = tm->tm_year - YEAR_OFFSET;
+
+	CONVERT_TO_LOCAL_TIME_IF_NEEDED(tm);
 
 	pr_debug("set time %02d.%02d.%02d %02d/%02d/%02d\n",
 		 tm->tm_year, tm->tm_mon, tm->tm_mday,
@@ -354,7 +383,7 @@ static int s3c_rtc_settime(struct device *dev, struct rtc_time *tm)
 	writeb(bin2bcd(tm->tm_hour), base + S3C_RTCHOUR);
 	writeb(bin2bcd(tm->tm_mday), base + S3C_RTCDATE);
 	writeb(bin2bcd(tm->tm_mon + 1), base + S3C_RTCMON);
-	writeb(bin2bcd(year), base + S3C_RTCYEAR);
+	writeb(YEAR_BIN2BCD(year), base + S3C_RTCYEAR);
 
 	return 0;
 }
@@ -404,17 +433,14 @@ static int s3c_rtc_getalarm(struct device *dev, struct rtc_wkalrm *alrm)
 	else
 		alm_tm->tm_mday = 0xff;
 
-	if (alm_en & S3C_RTCALM_MONEN) {
-		alm_tm->tm_mon = bcd2bin(alm_tm->tm_mon);
-		alm_tm->tm_mon -= 1;
-	} else {
+	if (alm_en & S3C_RTCALM_MONEN)
+		alm_tm->tm_mon = bcd2bin(alm_tm->tm_mon) - 1;
+	else
 		alm_tm->tm_mon = 0xff;
-	}
 
-	if (alm_en & S3C_RTCALM_YEAREN) {
-		alm_tm->tm_year = bcd2bin(alm_tm->tm_year);
-		alm_tm->tm_year += 100;
-	} else
+	if (alm_en & S3C_RTCALM_YEAREN)
+		alm_tm->tm_year = YEAR_BCD2BIN(alm_tm->tm_year) + YEAR_OFFSET;
+	else
 		alm_tm->tm_year = 0xffff;
 
 	return 0;
@@ -426,7 +452,9 @@ static int s3c_rtc_setalarm(struct device *dev, struct rtc_wkalrm *alrm)
 	void __iomem *base = s3c_rtc_base;
 	unsigned int alrm_en;
 
-	int year = tm->tm_year - 100;
+	int year = tm->tm_year - YEAR_OFFSET;
+
+	CONVERT_TO_LOCAL_TIME_IF_NEEDED(tm);
 
 	pr_debug("s3c_rtc_setalarm: %d, %02x/%02x/%02x %02x.%02x.%02x\n",
 		 alrm->enabled,
@@ -463,7 +491,7 @@ static int s3c_rtc_setalarm(struct device *dev, struct rtc_wkalrm *alrm)
 
 	if (year < 100 && year >= 0) {
 		alrm_en |= S3C_RTCALM_YEAREN;
-		writeb(bin2bcd(year), base + S3C_ALMYEAR);
+		writeb(YEAR_BIN2BCD(year), base + S3C_ALMYEAR);
 	}
 
 	pr_debug("setting S3C_RTCALM to %08x\n", alrm_en);
