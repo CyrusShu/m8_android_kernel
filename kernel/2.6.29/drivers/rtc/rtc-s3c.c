@@ -68,6 +68,13 @@
 		rtc_time_to_tm(local_time, tm); \
 	} while (0)
 
+#define CONVERT_TO_UTC_TIME_IF_NEEDED(tm)  do { \
+		unsigned long utc_time = 0; \
+		rtc_tm_to_time(tm, &utc_time); \
+		utc_time += sys_tz.tz_minuteswest * 60; \
+		rtc_time_to_tm(utc_time, tm); \
+	} while (0)
+
 #else
 
 #define YEAR_OFFSET					(100)
@@ -75,6 +82,7 @@
 #define YEAR_BIN2BCD(y)				(bin2bcd(y))
 
 #define CONVERT_TO_LOCAL_TIME_IF_NEEDED(tm)  do {} while (0)
+#define CONVERT_TO_UTC_TIME_IF_NEEDED(tm)  do {} while (0)
 
 #endif
 
@@ -352,6 +360,8 @@ static int s3c_rtc_gettime(struct device *dev, struct rtc_time *rtc_tm)
 	rtc_tm->tm_mon = bcd2bin(rtc_tm->tm_mon) - 1;
 	rtc_tm->tm_year = YEAR_BCD2BIN(rtc_tm->tm_year) + YEAR_OFFSET;
 
+	CONVERT_TO_UTC_TIME_IF_NEEDED(rtc_tm);
+
 	return 0;
 }
 
@@ -442,6 +452,11 @@ static int s3c_rtc_getalarm(struct device *dev, struct rtc_wkalrm *alrm)
 		alm_tm->tm_year = YEAR_BCD2BIN(alm_tm->tm_year) + YEAR_OFFSET;
 	else
 		alm_tm->tm_year = 0xffff;
+
+	if (alm_en & (S3C_RTCALM_SECEN | S3C_RTCALM_MINEN |S3C_RTCALM_HOUREN
+			| S3C_RTCALM_DAYEN | S3C_RTCALM_MONEN | S3C_RTCALM_YEAREN)) {
+		CONVERT_TO_UTC_TIME_IF_NEEDED(alm_tm);
+	}
 
 	return 0;
 }
@@ -648,7 +663,9 @@ static int s3c_rtc_probe(struct platform_device *pdev)
 	struct rtc_device *rtc;
 	struct resource *res;
 	int ret;
+#ifndef SET_RTC_DEFAULT_RESET_TIME
 	unsigned char bcd_tmp,bcd_loop;
+#endif
 
 	pr_debug("%s: probe=%p\n", __func__, pdev);
 	printk("%s: probe=%p\n", __func__, pdev);
