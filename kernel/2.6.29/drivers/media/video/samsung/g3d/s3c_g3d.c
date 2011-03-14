@@ -531,7 +531,7 @@ void low_memory_killer(unsigned int uiRequsetBlock, mem_map_t uiMemMask, unsigne
 		return;
 	}
 	
-	chunk_start_num = G3D_UI_CHUNK_NUM;
+	chunk_start_num = 0;//G3D_UI_CHUNK_NUM;
 	chunk_end_num = G3D_CHUNK_NUM;
 
 	s_info=s_info->next;	// the first s_info is surfaceflinger
@@ -561,7 +561,7 @@ void low_memory_killer(unsigned int uiRequsetBlock, mem_map_t uiMemMask, unsigne
 	kill_id = k_info->file_desc_id;
 //	printk("low momory killer : kill the oldest process(0x%x)\n",kill_id);
 
-	for(loop_i = G3D_UI_CHUNK_NUM ; loop_i < G3D_CHUNK_NUM; loop_i++ ){
+	for(loop_i = chunk_start_num; loop_i < chunk_end_num; loop_i++ ){
 		if((g3d_bootm[loop_i].file_desc_id) == (unsigned int)kill_id){
 			if (g3d_bootm[loop_i].in_used == G3D_CHUCNK_RESERVED){
 		        		s3c_g3d_release_chunk(g3d_bootm[loop_i].phy_addr, g3d_bootm[loop_i].size);
@@ -590,16 +590,16 @@ unsigned long s3c_g3d_available_chunk_size(unsigned int request_size, unsigned i
 	{
 		enable_lmk = 0;
 		chunk_start_num = 0;
-		chunk_end_num = G3D_UI_CHUNK_NUM;
+		chunk_end_num = G3D_CHUNK_NUM;//G3D_UI_CHUNK_NUM;
 	}
 	else if(alloc_info_head->file_desc_id==id) {
 		enable_lmk = 0;
 		chunk_start_num = 0;
-		chunk_end_num = G3D_UI_CHUNK_NUM;
+		chunk_end_num = G3D_CHUNK_NUM;//G3D_UI_CHUNK_NUM;
 	}
 	else{	
 		enable_lmk = 1;
-		chunk_start_num = G3D_UI_CHUNK_NUM;
+		chunk_start_num = 0;//G3D_UI_CHUNK_NUM;
 		chunk_end_num = G3D_CHUNK_NUM;
 	}
 
@@ -692,14 +692,14 @@ unsigned long s3c_g3d_reserve_chunk(struct file* filp, unsigned int size)
 	if(!alloc_info_head)
 	{
 		chunk_start_num = 0;
-		chunk_end_num = G3D_UI_CHUNK_NUM;
+		chunk_end_num = G3D_CHUNK_NUM;//G3D_UI_CHUNK_NUM;
 	}
 	else if(alloc_info_head->file_desc_id==id) {
 		chunk_start_num = 0;
-		chunk_end_num = G3D_UI_CHUNK_NUM;
+		chunk_end_num = G3D_CHUNK_NUM;//G3D_UI_CHUNK_NUM;
 	}
 	else{	
-		chunk_start_num = G3D_UI_CHUNK_NUM;
+		chunk_start_num = 0;//G3D_UI_CHUNK_NUM;
 		chunk_end_num = G3D_CHUNK_NUM;
 	}
 
