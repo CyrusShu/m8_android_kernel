@@ -84,7 +84,7 @@ static struct user_wake_lock *lookup_wake_lock_name(
 		diff = strncmp(buf, l->name, name_len);
 		if (!diff && l->name[name_len])
 			diff = -1;
-		if (debug_mask & DEBUG_ERROR)
+		if (debug_mask & DEBUG_LOOKUP)
 			pr_info("lookup_wake_lock_name: compare %.*s %s %d\n",
 				name_len, buf, l->name, diff);
 
