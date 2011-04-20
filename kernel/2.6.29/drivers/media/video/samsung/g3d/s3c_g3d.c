@@ -513,8 +513,9 @@ void printRemainChunk(void)
 	printk("Available Count %d\n", j);
 }
 
-void low_memory_killer(unsigned int uiRequsetBlock, mem_map_t uiMemMask, unsigned int id)
+static int low_memory_killer(unsigned int uiRequsetBlock, mem_map_t uiMemMask, unsigned int id)
 {
+	int free_blk = 0;
 	alloc_info *s_info = alloc_info_head;
 	alloc_info *k_info = NULL;
 	unsigned int kill_id;
@@ -528,7 +529,7 @@ void low_memory_killer(unsigned int uiRequsetBlock, mem_map_t uiMemMask, unsigne
 	if(!s_info) 
 	{
 		printk("surfaceflinger's memory not found\n");
-		return;
+		return 0;
 	}
 	
 	chunk_start_num = 0;//G3D_UI_CHUNK_NUM;
@@ -555,7 +556,7 @@ void low_memory_killer(unsigned int uiRequsetBlock, mem_map_t uiMemMask, unsigne
 		if(k_info==alloc_info_tail) printk("k_info==self\n");
 		else printk("k_info==NULL\n");
 		printk("oldest 3D process's memory not found\n");
-		return;
+		return 0;
 	}
 
 	kill_id = k_info->file_desc_id;
@@ -565,14 +566,20 @@ void low_memory_killer(unsigned int uiRequsetBlock, mem_map_t uiMemMask, unsigne
 		if((g3d_bootm[loop_i].file_desc_id) == (unsigned int)kill_id){
 			if (g3d_bootm[loop_i].in_used == G3D_CHUCNK_RESERVED){
 		        		s3c_g3d_release_chunk(g3d_bootm[loop_i].phy_addr, g3d_bootm[loop_i].size);
+					free_blk++;
 			}
 			g3d_bootm[loop_i].file_desc_id = 0;
 	  	}
   	}
+
+	return free_blk;
 }
 
 unsigned long s3c_g3d_available_chunk_size(unsigned int request_size, unsigned int id)
 {
+	static unsigned int last_failed_id = 0;
+	static unsigned int failed_times = 0;
+
 	unsigned int loop_i, loop_j;
 
 	unsigned int uiRequsetBlock = (int)(request_size / G3D_CHUNK_SIZE);
@@ -580,37 +587,53 @@ unsigned long s3c_g3d_available_chunk_size(unsigned int request_size, unsigned i
 
 	int chunk_start_num;
 	int chunk_end_num;
-	int enable_lmk;
+	int is_3d_app;
+	int free_blk = 0;
 
 	if (request_size % G3D_CHUNK_SIZE > 0)
 		uiRequsetBlock += 1;
-	
 
 	if(!alloc_info_head)
 	{
-		enable_lmk = 0;
+		is_3d_app = 0;
 		chunk_start_num = 0;
 		chunk_end_num = G3D_CHUNK_NUM;//G3D_UI_CHUNK_NUM;
 	}
 	else if(alloc_info_head->file_desc_id==id) {
-		enable_lmk = 0;
+		is_3d_app = 0;
 		chunk_start_num = 0;
 		chunk_end_num = G3D_CHUNK_NUM;//G3D_UI_CHUNK_NUM;
 	}
 	else{	
-		enable_lmk = 1;
+		is_3d_app = 1;
 		chunk_start_num = 0;//G3D_UI_CHUNK_NUM;
 		chunk_end_num = G3D_CHUNK_NUM;
 	}
 
 	for(loop_j = 0; loop_j < 10; loop_j++ ) {
 		for(loop_i = chunk_start_num; loop_i < chunk_end_num - (uiRequsetBlock -1) ; loop_i++ ) {
-		
-			if ((g_uiFreeMemMap & (uiMemMask << loop_i)) == (uiMemMask << loop_i))
-				return G3D_CHUNK_SIZE * uiRequsetBlock;			
+			if ((g_uiFreeMemMap & (uiMemMask << loop_i)) == (uiMemMask << loop_i)) {
+				last_failed_id = 0;
+				failed_times = 0;
+				return G3D_CHUNK_SIZE * uiRequsetBlock;
+			}
 		}
 
-		if(enable_lmk) low_memory_killer(uiRequsetBlock,uiMemMask,id);
+		if (last_failed_id != id) {
+			last_failed_id = id;
+			failed_times = 1;
+		} else
+			failed_times++;
+
+		if (is_3d_app && (failed_times > 1))
+			break;
+
+		free_blk = low_memory_killer(uiRequsetBlock, uiMemMask, id);
+		if (free_blk > 0)
+			continue;
+
+		if (is_3d_app) /* 3D apps retry 1 time, should fix lag problem, though not enough memory. */
+			break;
 
 		mutex_unlock(&mem_alloc_lock);
 		printk("wait 0.%d sec to get releaing memory\n", loop_j);
@@ -618,7 +641,10 @@ unsigned long s3c_g3d_available_chunk_size(unsigned int request_size, unsigned i
 		mutex_lock(&mem_alloc_lock);
 	}
 
-	printk("s3c_g3d_available_chunk_size failed : %s cannot find adequate memory!\n", enable_lmk ? "3D apps":"Surfaceflinger");
+	if (failed_times == 1)
+		printk("s3c_g3d_available_chunk_size failed : %s cannot find adequate memory!", is_3d_app ? "3D apps":"Surfaceflinger");
+	else if (failed_times == 2)
+		printk("s3c_g3d_available_chunk_size failed : %s cannot find adequate memory! (more failed not print...)\n", is_3d_app ? "3D apps":"Surfaceflinger");
     
 	return 0;
 }
