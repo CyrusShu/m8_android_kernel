@@ -52,9 +52,7 @@ static struct s3c2410_dma_client s3c_m2m_dma_client = {
 	.name		= "s3c-m2m-dma",
 };
 
-DECLARE_COMPLETION_ONSTACK(s3c_m2m_dma_complete);
-
-static void *s3c_m2m_dma_done = &s3c_m2m_dma_complete;			/* completion */
+static void *s3c_m2m_dma_done = NULL;			/* completion */
 
 static void s3c_m2m_dma_finish(struct s3c2410_dma_chan *dma_ch, void *buf_id,
         int size, enum s3c2410_dma_buffresult result)
@@ -74,6 +72,9 @@ int s3c_mem_ioctl(struct inode *inode, struct file *file, unsigned int cmd, unsi
 	struct mm_struct *mm = current->mm;
 	struct s3c_mem_alloc param;
 	struct s3c_mem_dma_param dma_param;
+	DECLARE_COMPLETION_ONSTACK(s3c_m2m_dma_complete);
+
+	s3c_m2m_dma_done = &s3c_m2m_dma_complete;			/* completion */
 
 	switch (cmd) {
 		case S3C_MEM_ALLOC:
