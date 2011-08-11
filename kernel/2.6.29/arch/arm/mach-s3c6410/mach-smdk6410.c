@@ -913,6 +913,8 @@ EXPORT_SYMBOL(s3c_config_wakeup_gpio);
 
 void s3c_config_wakeup_source(void)
 {
+	int eint_mask = 0;
+
 	set_irq_type(gpio_to_irq(S3C64XX_GPN(9)), IRQ_TYPE_EDGE_BOTH);
 	set_irq_type(gpio_to_irq(S3C64XX_GPN(4)), IRQ_TYPE_EDGE_BOTH);
 	set_irq_type(gpio_to_irq(S3C64XX_GPN(13)), IRQ_TYPE_EDGE_BOTH);
@@ -922,9 +924,15 @@ void s3c_config_wakeup_source(void)
 
 	udelay(50);
 
-	__raw_writel((1<<4)|(1<<9)|(1<<13)|(1<<17), S3C64XX_EINT0PEND);
-	__raw_writel(0x0fffffff&~((1<<4)|(1<<9)|(1<<13)|(1<<17)), S3C64XX_EINT0MASK);	
-	__raw_writel(0x0fffffff&~((1<<4)|(1<<9)|(1<<13)|(1<<17)), S3C_EINT_MASK);
+	eint_mask = 	(1<<4)		/* Home Button */
+				| (1<<9)		/* Power Button */
+				| (1<<11)	/* Bluetooth */
+				| (1<<13)	/* USB */
+				| (1<<17)	/* RIL */
+				| (1<<19);	/* WIFI */
+	__raw_writel(eint_mask, S3C64XX_EINT0PEND);
+	__raw_writel(0x0fffffff&~eint_mask, S3C64XX_EINT0MASK);
+	__raw_writel(0x0fffffff&~eint_mask, S3C_EINT_MASK);
 
 	/* Alarm Wakeup Enable */
 	__raw_writel((__raw_readl(S3C_PWR_CFG) & ~(0x1 << 10)), S3C_PWR_CFG);
