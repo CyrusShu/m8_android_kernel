@@ -575,10 +575,11 @@ static int low_memory_killer(unsigned int uiRequsetBlock, mem_map_t uiMemMask, u
 	return free_blk;
 }
 
+static unsigned int failed_times = 0;
+
 unsigned long s3c_g3d_available_chunk_size(unsigned int request_size, unsigned int id)
 {
 	static unsigned int last_failed_id = 0;
-	static unsigned int failed_times = 0;
 
 	unsigned int loop_i, loop_j;
 
@@ -962,7 +963,10 @@ static int s3c_g3d_ioctl(struct inode *inode, struct file *file, unsigned int cm
 		param.size = s3c_g3d_available_chunk_size(param.size,(unsigned int)file->private_data);
 
 		if (param.size == 0){
-			printk("S3C_3D_MEM_ALLOC FAILED because there is no block memory bigger than you request\n");
+			if (failed_times == 1)
+				printk("S3C_3D_MEM_ALLOC FAILED because there is no block memory bigger than you request\n");
+			else if (failed_times == 2)
+				printk("S3C_3D_MEM_ALLOC FAILED because there is no block memory bigger than you request (more failed not print...)\n");
 			flag = 0;
 			mutex_unlock(&mem_alloc_lock);			
 			return -EFAULT;
