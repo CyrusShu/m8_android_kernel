@@ -42,6 +42,7 @@ struct gpio_keys_drvdata *ddata;
 #define HOME_KEYCODE		158
 #define VOLUME_DOWN_KEYCODE	102
 #define VOLUME_UP_KEYCODE	108
+#define POWER_KEYCODE		139
 #define COMBINE_KEY		HOME_KEYCODE
 
 static int can_combine = 0;
@@ -51,6 +52,7 @@ static void add_fake_keys_capability(struct input_dev *input)
 {
 	input_set_capability(input, EV_KEY, KEY_VOLUMEDOWN);
 	input_set_capability(input, EV_KEY, KEY_VOLUMEUP);
+	input_set_capability(input, EV_KEY, KEY_SEARCH);
 }
 
 static void gpio_keys_report_event(struct gpio_button_data *bdata)
@@ -65,7 +67,7 @@ static void gpio_keys_report_event(struct gpio_button_data *bdata)
 	case COMBINE_KEY:
 		if (state == 1) { // press down
 			can_combine++;
-			if (can_combine <= 3) // pending 3 times (about 1.5s), waitting for combine key
+			if (can_combine <= 2) // pending 2 times (about 1s), waitting for combine key
 				return;
 			else
 				can_combine--; // waitting for combine key timeout, sending normal
@@ -83,18 +85,21 @@ static void gpio_keys_report_event(struct gpio_button_data *bdata)
 				pr_debug("gpio_keys_report_event(send pending):type=%d;state:%d,raw_keycode:%d,keycode:%d\n",type,!state,button->code,keycode);
 				input_event(input, type, keycode, !state);//state其实表示的就是press，1表按下，0表示抬起,先上报1，再上报0(按键动作完成，清除按键事件)，Linux规定的, modified by hui
 				input_sync(input);
-				mdelay(50);
+				mdelay(10);
 				can_combine--;
 			}
 		}
 		break;
 	case VOLUME_DOWN_KEYCODE:
 	case VOLUME_UP_KEYCODE:
+	case POWER_KEYCODE:
 		if (can_combine > 0 || has_combine) {
 			if (keycode == VOLUME_DOWN_KEYCODE)
 				keycode = KEY_VOLUMEDOWN;
 			else if (keycode == VOLUME_UP_KEYCODE)
 				keycode = KEY_VOLUMEUP;
+			else if (keycode == POWER_KEYCODE)
+				keycode = KEY_SEARCH;	/* M + Power -> SEARCH */
 
 			if (state == 1)
 				has_combine = 1;
