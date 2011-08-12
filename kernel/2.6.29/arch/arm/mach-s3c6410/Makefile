@@ -24,4 +24,4 @@ obj-$(CONFIG_PM)    += pm.o
 
 # Machine support
 
-obj-$(CONFIG_MACH_SMDK6410)	+= mach-smdk6410.o
+obj-$(CONFIG_MACH_SMDK6410)	+= mach-smdk6410.o m8-rfkill.o

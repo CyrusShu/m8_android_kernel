@@ -274,6 +274,16 @@ static struct platform_device m8_vibrator = {
 	},
 };
 
+struct platform_device m8_device_rfkill = {
+	.name = "bt_rfkill",
+	.id = -1,
+};
+
+/*struct platform_device m8_device_btsleep = {
+	.name = "bt_sleep",
+	.id = -1,
+};*/
+
 static struct platform_device *smdk6410_devices[] __initdata = {
 	&s3c_device_hsmmc1,
 	&s3c_device_i2c0,
@@ -326,6 +336,8 @@ static struct platform_device *smdk6410_devices[] __initdata = {
 	&sec_device_battery,
 	&m8_switch_device,
 	&m8_vibrator,
+	&m8_device_rfkill,   /* BT POWER ON-OFF */
+//	&m8_device_btsleep,  /* BT SLEEP-AWAKE */
 };
 
 static struct i2c_board_info i2c_devs0_se[] __initdata = {
