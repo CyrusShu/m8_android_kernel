@@ -40,6 +40,8 @@
 #include <plat/devs.h>
 #include <plat/sdhci.h>
 
+#ifdef CONFIG_RFKILL
+
 extern void s3c_setup_uart_cfg_gpio(unsigned char port);
 extern void s3c_reset_uart_cfg_gpio(unsigned char port);
 
@@ -322,3 +324,5 @@ static int __init m8_rfkill_init(void)
 module_init(m8_rfkill_init);
 MODULE_DESCRIPTION("M8 rfkill");
 MODULE_LICENSE("GPL");
+
+#endif
