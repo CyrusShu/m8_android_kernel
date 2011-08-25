@@ -578,6 +578,10 @@ static void __init smdk6410_machine_init(void)
 	s3c_device_nand.dev.platform_data = &s3c_nand_mtd_part_info;
 	s3c_device_onenand.dev.platform_data = &s3c_nand_mtd_part_info;
 
+	/* Fake system serial, based on a7d55a4d-10f9-3135-3030-313406060809 */
+	system_serial_high = 0x3134;
+	system_serial_low = 0x06060809;
+
 	smdk6410_smc911x_set();
 
 	s3c_i2c0_set_platdata(NULL);
@@ -952,6 +956,9 @@ void s3c_config_wakeup_source(void)
 }
 EXPORT_SYMBOL(s3c_config_wakeup_source);
 
+#define M8_FE	0x01
+#define M8_SE	0x02
+
 // Return true for M8-SE, otherwise for M8-FE 
 int m8_checkse(void)
 {
@@ -970,10 +977,12 @@ int m8_checkse(void)
 		
 		if ((gpq2 == 0) && (gpq3 == 0)) {
 			m8_se = false;
+			system_rev = M8_FE;
 			printk("M8 Version Detect: M8 FE\n");
 			proc_mkdir("m8_fe", 0);
 		} else {
 			m8_se = true;
+			system_rev = M8_SE;
 			printk("M8 Version Detect: M8 SE\n");
 			proc_mkdir("m8_se", 0);
 		}
