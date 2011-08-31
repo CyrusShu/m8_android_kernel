@@ -30,6 +30,10 @@
 #include "btmrvl_drv.h"
 #include "btmrvl_sdio.h"
 
+#ifdef CONFIG_MACH_SMDK6410
+#include <mach/gpio.h>
+#endif
+
 #define VERSION "1.0"
 
 /* The btmrvl_sdio_remove() callback function is called
@@ -937,8 +941,19 @@ static int btmrvl_sdio_probe(struct sdio_func *func,
 		goto disable_host_int;
 	}
 
+#ifdef CONFIG_MACH_SMDK6410
+	priv->btmrvl_dev.gpio_gap = (S3C64XX_GPL(11)<<8) | 0xff;
+	priv->btmrvl_dev.hscfgcmd = 1;
+	btmrvl_set_hscfg(priv);
+
+	priv->btmrvl_dev.hscmd = 1;
+	btmrvl_enable_hs(priv);
+#endif
+
+#if 0
 	priv->btmrvl_dev.psmode = 1;
 	btmrvl_enable_ps(priv);
+#endif
 
 	return 0;
 
