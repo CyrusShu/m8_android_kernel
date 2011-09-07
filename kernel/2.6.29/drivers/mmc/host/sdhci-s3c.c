@@ -481,7 +481,8 @@ static int __devexit sdhci_s3c_remove(struct platform_device *pdev)
 
 #ifdef CONFIG_PM
 void m8_wifi_power(int on);
-extern int wifi_status;
+void m8_bt_power(int on, int sdio);
+extern int wifi_status, bt_power;
 static int sdhci_s3c_suspend(struct platform_device *pdev, pm_message_t state)
 {
 	struct s3c_sdhci_platdata *pdata = pdev->dev.platform_data;
@@ -498,13 +499,18 @@ static int sdhci_s3c_resume(struct platform_device *pdev)
 	struct s3c_sdhci_platdata *pdata = pdev->dev.platform_data;
 	struct sdhci_host *s3c_host = pdata->sdhci_host;
 
-
 	sdhci_resume_host(s3c_host);
 
-	if ((s3c_host->hwport == 0) && (wifi_status == 1))
+	if ((s3c_host->hwport == 0) && (wifi_status == 1 || bt_power == 1))
 	{
 		printk("Resume SDIO8688\n");
-		m8_wifi_power(1);
+		if (wifi_status) {
+			m8_wifi_power(0);
+			m8_wifi_power(1);
+		} else if (bt_power) {
+			m8_bt_power(0, 1);
+			m8_bt_power(1, 1);
+		}
 		sdhci_s3c_force_presence_change(pdev);
 	}
 #ifdef CONFIG_CPU_FREQ

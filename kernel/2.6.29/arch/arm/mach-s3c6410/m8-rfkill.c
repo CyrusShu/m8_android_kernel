@@ -45,48 +45,50 @@
 extern void s3c_setup_uart_cfg_gpio(unsigned char port);
 extern void s3c_reset_uart_cfg_gpio(unsigned char port);
 
-#define IRQ_BT_HOST_WAKE      IRQ_EINT(11)
-//#define IRQ_WLAN_HOST_WAKE????      IRQ_EINT(19)
+//#define IRQ_BT_HOST_WAKE      IRQ_EINT(11)
+#define IRQ_WLAN_BT_HOST_WAKE      IRQ_EINT(19)
 
-#define GPIO_WLAN_BT_EN			S3C64XX_GPK(1) // GPL(1)???
-#define GPIO_BT_nRST			S3C64XX_GPM(3) // GPL(3)???
-#define GPIO_BT_HOST_WAKE		S3C64XX_GPN(11)
-//#define GPIO_WLAN_HOST_WAKE????		S3C64XX_GPL(11)
+//#define GPIO_WLAN_BT_EN		S3C64XX_GPK(1)
+//#define GPIO_BT_nRST			S3C64XX_GPM(3)
+//#define GPIO_BT_HOST_WAKE		S3C64XX_GPN(11)
+#define GPIO_WLAN_BT_HOST_WAKE		S3C64XX_GPL(11)
 
 static struct wake_lock rfkill_wake_lock;
-
-#ifndef	GPIO_LEVEL_LOW
-#define GPIO_LEVEL_LOW		0
-#define GPIO_LEVEL_HIGH		1
-#endif
 
 static struct rfkill *bt_rfk;
 static const char bt_name[] = "btmrvl";
 
 static int loaded = 0;
 
+static int sdio = 1;
+module_param_named(sdio, sdio, int, 0600);
+MODULE_PARM_DESC(sdio, "enable BT over SDIO interface' (default: 1=on)");
+
 static int bluetooth_set_power(void *data, enum rfkill_user_states state)
 {
 	int ret = 0;
 	int irq;
 	/* BT Host Wake IRQ */
-	irq = IRQ_BT_HOST_WAKE;
+	irq = IRQ_WLAN_BT_HOST_WAKE;
 
 	switch (state) {
 
 	case RFKILL_USER_STATE_UNBLOCKED:
 		printk("[BT] Device Powering ON \n");//pr_debug
 
-		/* Bluetooth over SDIO */
-		if (loaded) {
-			m8_wifi_power(1);
-			msleep(100);
-			if (m8_checkse()) 
-				sdhci_s3c_force_presence_change(&s3c_device_hsmmc0);
-		}
+		if (!loaded)
+			break;
 
+		/* Bluetooth over SDIO */
+		m8_bt_power(1, sdio);
+		msleep(100);
+		if (sdio && m8_checkse())
+			sdhci_s3c_force_presence_change(&s3c_device_hsmmc0);
+
+		msleep(100);
+		if (!sdio)
+			s3c_setup_uart_cfg_gpio(1);
 #if 0 // uart not work now
-		s3c_setup_uart_cfg_gpio(1);
 
 		if (gpio_is_valid(GPIO_WLAN_BT_EN)) {
 			printk("[BT] gpio_is_valid(GPIO_WLAN_BT_EN)\n");
@@ -140,24 +142,25 @@ static int bluetooth_set_power(void *data, enum rfkill_user_states state)
 		//ret = enable_irq_wake(irq);
 		//if (ret < 0)
 		//	pr_err("[BT] set wakeup src failed\n");
+#endif
 
 		enable_irq(irq);
-#endif
 		break;
 
 	case RFKILL_USER_STATE_SOFT_BLOCKED:
 		printk("[BT] Device Powering OFF\n");
 
-		/* Bluetooth over SDIO */
-		if (loaded) {
-			m8_wifi_power(0);
-			msleep(100);
-			if (m8_checkse()) 
-				sdhci_s3c_force_presence_change(&s3c_device_hsmmc0);
-		}
+		if (!loaded)
+			break;
 
-#if 0 // UART
-		//s3c_reset_uart_cfg_gpio(1);
+		/* Bluetooth over SDIO */
+		m8_bt_power(0, sdio);
+		msleep(100);
+		if (sdio && m8_checkse())
+			sdhci_s3c_force_presence_change(&s3c_device_hsmmc0);
+
+		//if (!sdio)
+		//	s3c_reset_uart_cfg_gpio(1);
 
 		//ret = disable_irq_wake(irq);
 		//if (ret < 0)
@@ -165,7 +168,9 @@ static int bluetooth_set_power(void *data, enum rfkill_user_states state)
 
 		disable_irq(irq);
 		wake_unlock(&rfkill_wake_lock);
+		printk("[BT] wake_unlock rfkill_wake_lock\n");
 
+#if 0 // UART
 		s3c_gpio_setpull(GPIO_BT_nRST, S3C_GPIO_PULL_NONE);
 		gpio_set_value(GPIO_BT_nRST, GPIO_LEVEL_LOW);
 
@@ -196,19 +201,19 @@ static int bluetooth_set_power(void *data, enum rfkill_user_states state)
 	return 0;
 }
 
-#if 0
 irqreturn_t bt_host_wake_irq_handler(int irq, void *dev_id)
 {
 	printk("[BT] bt_host_wake_irq_handler start\n");
 
-	if (gpio_get_value(GPIO_BT_HOST_WAKE))
+	if (gpio_get_value(GPIO_WLAN_BT_HOST_WAKE)) {
+		printk("[BT] wake_lock rfkill_wake_lock\n");
 		wake_lock(&rfkill_wake_lock);
+	}
 	else
 		wake_lock_timeout(&rfkill_wake_lock, HZ);
 
 	return IRQ_HANDLED;
 }
-#endif
 
 static int bt_rfkill_set_block(void *data, bool blocked)
 {
@@ -230,10 +235,10 @@ static int __init m8_rfkill_probe(struct platform_device *pdev)
 	int irq;
 	int ret;
 
-#if 0
 	/* Initialize wake locks */
 	wake_lock_init(&rfkill_wake_lock, WAKE_LOCK_SUSPEND, "bt_host_wake");
 
+#if 0
 	ret = gpio_request(GPIO_WLAN_BT_EN, "GPK");
 	if (ret < 0) {
 		printk(KERN_ERR"[BT] Failed to request GPIO_WLAN_BT_EN!\n");//pr_error
@@ -245,9 +250,10 @@ static int __init m8_rfkill_probe(struct platform_device *pdev)
 		printk(KERN_ERR"[BT] Failed to request GPIO_BT_nRST!\n");//pr_error
 		goto err_req_gpio_bt_nrst;
 	}
+#endif
 
 	/* BT Host Wake IRQ */
-	irq = IRQ_BT_HOST_WAKE;
+	irq = IRQ_WLAN_BT_HOST_WAKE;
 
 	ret = request_irq(irq, bt_host_wake_irq_handler,
 			IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
@@ -259,7 +265,6 @@ static int __init m8_rfkill_probe(struct platform_device *pdev)
 	}
 
 	disable_irq(irq);
-#endif
 
 	bt_rfk = rfkill_alloc(bt_name, &pdev->dev, RFKILL_TYPE_BLUETOOTH,
 			&bt_rfkill_ops, NULL);
@@ -291,10 +296,10 @@ static int __init m8_rfkill_probe(struct platform_device *pdev)
 	rfkill_destroy(bt_rfk);
 
  err_alloc:
-#if 0
 	free_irq(irq, NULL);
 
  err_req_irq:
+#if 0
 	gpio_free(GPIO_BT_nRST);
 
  err_req_gpio_bt_nrst:

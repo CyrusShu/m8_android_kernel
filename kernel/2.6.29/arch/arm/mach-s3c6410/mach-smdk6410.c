@@ -377,7 +377,7 @@ static struct s3c_adc_mach_info s3c_adc_platform __initdata= {
 	.resolution = 	12,
 };
 
-// Power up WIFI Module
+// Power up GSM Module
 void m8_gsm_power(int on) {
 // only power on is supported, for now.
 // PWBB: GPD4, RESET_BB:GPM4
@@ -395,37 +395,117 @@ void m8_gsm_power(int on) {
 	gpio_set_value(S3C64XX_GPM(4), 1);	
 }
 
-int wifi_status = 0;
-void m8_wifi_power(int on) {
-	int err;
+/* WIFI/BT power on */
+#define GPIO_WB_PON	S3C64XX_GPD(0)
+#define GPIO_W3ON	S3C64XX_GPN(6)	/* WIFI power on?? */
 
-	int is_m8se = m8_checkse();
+static int m8_wifi_bt_power_cnt = 0;
+static DEFINE_MUTEX(m8_wifi_bt_power_lock);
 
-	wifi_status = 0;
-	
-	s3c_gpio_cfgpin(S3C64XX_GPD(0),S3C_GPIO_OUTPUT);
-	s3c_gpio_cfgpin(S3C64XX_GPN(6),S3C_GPIO_OUTPUT);
-	s3c_gpio_setpull(S3C64XX_GPD(0), S3C_GPIO_PULL_NONE);
-	s3c_gpio_setpull(S3C64XX_GPN(6), S3C_GPIO_PULL_NONE);
-	gpio_set_value(S3C64XX_GPD(0), 0);
-	gpio_set_value(S3C64XX_GPN(6), 0);
+static void m8_wifi_bt_power_inc(void)
+{
+	mutex_lock(&m8_wifi_bt_power_lock);
 
-	if (is_m8se) {
-		s3c_gpio_setpull(S3C64XX_GPL(7), S3C_GPIO_OUTPUT);
+	if (!(m8_wifi_bt_power_cnt++)) {
+		s3c_gpio_cfgpin(GPIO_WB_PON, S3C_GPIO_OUTPUT);
+		s3c_gpio_setpull(GPIO_WB_PON, S3C_GPIO_PULL_NONE);
+		s3c_gpio_cfgpin(GPIO_W3ON, S3C_GPIO_OUTPUT);
+		s3c_gpio_setpull(GPIO_W3ON, S3C_GPIO_PULL_NONE);
+		gpio_set_value(GPIO_WB_PON, 1);
+		gpio_set_value(GPIO_W3ON, 1);
+		msleep(100);
+	}
+	printk("m8_wifi_bt_power_inc = %d\n", m8_wifi_bt_power_cnt);
+
+	mutex_unlock(&m8_wifi_bt_power_lock);
+}
+
+static void m8_wifi_bt_power_dec(void)
+{
+	mutex_lock(&m8_wifi_bt_power_lock);
+
+	if (!(--m8_wifi_bt_power_cnt)) {
+		s3c_gpio_cfgpin(GPIO_WB_PON, S3C_GPIO_OUTPUT);
+		s3c_gpio_setpull(GPIO_WB_PON, S3C_GPIO_PULL_NONE);
+		s3c_gpio_cfgpin(GPIO_W3ON, S3C_GPIO_OUTPUT);
+		s3c_gpio_setpull(GPIO_W3ON, S3C_GPIO_PULL_NONE);
+		gpio_set_value(GPIO_WB_PON, 0);
+		gpio_set_value(GPIO_W3ON, 0);
+	}
+	printk("m8_wifi_bt_power_dec = %d\n", m8_wifi_bt_power_cnt);
+
+	mutex_unlock(&m8_wifi_bt_power_lock);
+}
+
+/* reset bluetooth */
+#define GPIO_RESETBL		S3C64XX_GPM(3)
+
+int bt_power = 0;
+
+void m8_bt_power(int on, int sdio)
+{
+	printk("m8_bt_power %d, %d, %d\n", bt_power, on, sdio);
+	if (on == bt_power)
+		return;
+
+	s3c_gpio_cfgpin(GPIO_RESETBL, S3C_GPIO_OUTPUT);
+	s3c_gpio_setpull(GPIO_RESETBL, S3C_GPIO_PULL_NONE);
+	if (sdio) {
+		s3c_gpio_setpull(S3C64XX_GPL(7), S3C_GPIO_OUTPUT);  /* is't true? */
 		s3c_gpio_setpull(S3C64XX_GPL(7), S3C_GPIO_PULL_NONE);
-		gpio_set_value(S3C64XX_GPL(7), 0);
 	}
 
 	if (on) {
-		wifi_status = 1;
-		msleep(10);
-		gpio_set_value(S3C64XX_GPD(0), 1);
-		gpio_set_value(S3C64XX_GPN(6), 1);
-		if (is_m8se) {
+		gpio_set_value(GPIO_RESETBL, 0);
+		msleep(50);
+		m8_wifi_bt_power_inc();
+		if (sdio)
 			gpio_set_value(S3C64XX_GPL(7), 1);
-		}
+		gpio_set_value(GPIO_RESETBL, 1);
+	} else {
+		gpio_set_value(GPIO_RESETBL, 0);
+		m8_wifi_bt_power_dec();
+		if (sdio)
+			gpio_set_value(S3C64XX_GPL(7), 0);
 	}
+
+	bt_power = on;
+}
+
+#define GPIO_RESET_SR	S3C64XX_GPL(7)	/* WIFI reset?? */
+
+int wifi_status = 0;
+
+void m8_wifi_power(int on)
+{
+	int is_m8se = m8_checkse();
 	
+	printk("m8_wifi_power %d -> %d\n", wifi_status, on);
+	if (wifi_status == on)
+		return;
+
+	s3c_gpio_cfgpin(GPIO_RESET_SR, S3C_GPIO_OUTPUT);
+	s3c_gpio_setpull(GPIO_RESET_SR, S3C_GPIO_PULL_NONE);
+	if (is_m8se) {
+		s3c_gpio_setpull(S3C64XX_GPL(7), S3C_GPIO_OUTPUT); /* SDIO?? */
+		s3c_gpio_setpull(S3C64XX_GPL(7), S3C_GPIO_PULL_NONE);
+	}
+
+	if (on) {
+		gpio_set_value(GPIO_RESET_SR, 0);
+		msleep(50);
+		m8_wifi_bt_power_inc();
+		if (is_m8se)
+			gpio_set_value(S3C64XX_GPL(7), 1);
+		gpio_set_value(GPIO_RESET_SR, 1);
+	} else {
+		gpio_set_value(GPIO_RESETBL, 0);
+		m8_wifi_bt_power_dec();
+		if (is_m8se)
+			gpio_set_value(S3C64XX_GPL(7), 0);
+	}
+
+	wifi_status = on;
 }
 EXPORT_SYMBOL(m8_wifi_power);
 
@@ -618,7 +698,7 @@ static void __init smdk6410_machine_init(void)
 	*/
 	smdk6410_usb_power(1);
 	//m8_gsm_power(1);
-	
+
 #if defined(CONFIG_SND_S3C_I2S_V32)
 	i2s_pin_init();
 #endif
@@ -902,7 +982,7 @@ void s3c_config_sleep_gpio(void)
 		__raw_writel((0x1<<0)|(0x3<<2)|(0x3<<4)|(0x3<<6)|(0x3<<8)|(0x1<<10)|(0x1<<12)|(0x0<<14)|(0x0<<16)|(0x0<<18)|(0x1<<20)|(0x0<<22)|(0x0<<24), S3C64XX_MEM0CONSLP1);
 		__raw_writel((0x5<<0)|(0x5<<4)|(0x5<<8)|(0x1<<12)|(0x1<<14)|(0x1<<16)|(0x1<<18)|(0x0<<20)|(0x0<<22)|(0x0<<24)|(0x0<<26)|(0x0<<28), S3C64XX_MEM1CONSLP);
 
-		if (wifi_status)
+		if (wifi_status || bt_power)
 		{
 			__raw_writel((0x2<<0*2)|(0x1<<1*2)|(0x1<<2*2)|(0x2<<3*2)|(0x1<<4*2), S3C64XX_GPDPUDSLP);
 			__raw_writel((0x1<<0*2)|(0x0<<1*2)|(0x0<<2*2)|(0x1<<3*2)|(0x2<<4*2), S3C64XX_GPDCONSLP);
@@ -937,6 +1017,10 @@ void s3c_config_wakeup_source(void)
 	s3c_gpio_setpull(S3C64XX_GPN(13), S3C_GPIO_PULL_NONE);
 	set_irq_type(gpio_to_irq(S3C64XX_GPL(9)), IRQ_TYPE_EDGE_BOTH);
 	s3c_gpio_setpull(S3C64XX_GPL(9), S3C_GPIO_PULL_NONE);
+	if (bt_power || wifi_status) {
+		set_irq_type(gpio_to_irq(S3C64XX_GPL(11)), IRQ_TYPE_EDGE_FALLING); /* EINT19, Wifi/BT */
+		s3c_gpio_setpull(S3C64XX_GPL(11), S3C_GPIO_PULL_NONE);
+	}
 
 	udelay(50);
 
@@ -946,6 +1030,10 @@ void s3c_config_wakeup_source(void)
 				| (1<<13)	/* USB */
 				| (1<<17)	/* RIL */
 				| (1<<19);	/* WIFI */
+	if (bt_power || wifi_status)
+		eint_mask |= (1<<11)	/* Bluetooth(?) */
+				| (1<<19);	/* WIFI/BT */
+
 	__raw_writel(eint_mask, S3C64XX_EINT0PEND);
 	__raw_writel(0x0fffffff&~eint_mask, S3C64XX_EINT0MASK);
 	__raw_writel(0x0fffffff&~eint_mask, S3C_EINT_MASK);
