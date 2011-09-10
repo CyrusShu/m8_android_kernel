@@ -326,6 +326,7 @@ static int setdma_tx(struct s3c_ep *ep, struct s3c_request *req)
 					break;
 				case EP3_IN:
 					if (ep->dev->config_gadget_driver == ETHER_RNDIS ||
+						ep->dev->config_gadget_driver == ANDROID_ADB_UMS ||
 						ep->dev->config_gadget_driver == ANDROID_ADB_UMS_ACM)
 						add_ep0_next_ep(ep_num);
 					break;
