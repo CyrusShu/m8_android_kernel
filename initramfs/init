@@ -35,30 +35,55 @@ fi
 
 mount -t vfat -o fmask=0000,dmask=0000,utf8,errors=continue,sync,dirsync $mmcblk /mnt/disk
 
+if [ -e /mnt/disk/lbe_android/e2fsck ]; then
+    foundfsck=1
+else
+    foundfsck=0
+fi
+
 if [ -e /mnt/disk/lbe_android/msys.img ]; then
-    curmd5=`md5sum /mnt/disk/lbe_android/msys.img | cut -d ' ' -f1`
-    validmd5=`cat /mnt/disk/lbe_android/version.txt | grep -i "CHECKSUM" | cut -d'=' -f2`
+    curmd5="1" #`md5sum /mnt/disk/lbe_android/msys.img | cut -d ' ' -f1`
+    validmd5="1" #`cat /mnt/disk/lbe_android/version.txt | grep -i "CHECKSUM" | cut -d'=' -f2`
 fi
 
 if [ -e /mnt/disk/lbe_android/mroot.img ] && [ -e /mnt/disk/lbe_android/msys.img ] && [ -e /mnt/disk/lbe_android/mdata.img ] && [ "$validmd5" = "$curmd5" ]; then
     foundmdroid=1
+    if [ $foundfsck -eq 1 ]; then
+        /mnt/disk/lbe_android/e2fsck -y /mnt/disk/lbe_android/mroot.img > /dev/tty1 2>&1
+    fi
     mount -o sync,dirsync /mnt/disk/lbe_android/mroot.img /mnt/looproot
     if [ $? -ne 0 ]; then
         umount /mnt/looproot
         foundmdroid=0
     fi
-    mount -r -o loop -t squashfs /mnt/disk/lbe_android/msys.img /mnt/looproot/system
+    if [ $foundfsck -eq 1 ]; then
+        /mnt/disk/lbe_android/e2fsck -y /mnt/disk/lbe_android/msys.img > /dev/tty1 2>&1
+    fi
+    mount -o sync,dirsync /mnt/disk/lbe_android/msys.img /mnt/looproot/system
+    if [ $? -ne 0 ]; then
+        mount -r -o loop -t squashfs /mnt/disk/lbe_android/msys.img /mnt/looproot/system
+    fi
     if [ $? -ne 0 ]; then
         umount /mnt/looproot/system
         umount /mnt/looproot
         foundmdroid=0
     fi
-    mount -o sync,dirsync /mnt/disk/lbe_android/mdata.img /mnt/looproot/data
+    if [ $foundfsck -eq 1 ]; then
+        /mnt/disk/lbe_android/e2fsck -y /mnt/disk/lbe_android/mdata.img > /dev/tty1 2>&1
+    fi
+    mount -o sync,dirsync,nosuid /mnt/disk/lbe_android/mdata.img /mnt/looproot/data
     if [ $? -ne 0 ] || [ ! -f /mnt/looproot/data/A11 ]; then
         umount /mnt/looproot/data
         umount /mnt/looproot/system
         umount /mnt/looproot
         foundmdroid=0
+    fi
+
+    if [ -e /mnt/disk/lbe_android/mcache.img ]; then
+        if [ $foundfsck -eq 1 ]; then
+            /mnt/disk/lbe_android/e2fsck -y /mnt/disk/lbe_android/mcache.img > /dev/tty1 2>&1
+        fi
+        mount -o sync,dirsync,nosuid /mnt/disk/lbe_android/mcache.img /mnt/looproot/cache
     fi
 else
     foundmdroid=0
