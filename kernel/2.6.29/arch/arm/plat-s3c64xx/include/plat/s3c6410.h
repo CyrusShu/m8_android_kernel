@@ -22,6 +22,7 @@ extern void s3c6410_map_io(void);
 extern void s3c6410_init_clocks(int xtal);
 extern void s3c6410_register_clocks(void);
 extern int m8_checkse(void);
+extern void m8_bt_power(int on, int sdio);
 extern void m8_wifi_power(int on);
 
 #define s3c6410_init_uarts s3c64xx_common_init_uarts
