@@ -298,7 +298,18 @@ static struct platform_device *smdk6410_devices[] __initdata = {
 	&s3c_device_keypad,
 //	&s3c_device_usb,
 	&meizu_m8_buttons,		/*modified by meizu*/
+#ifdef CONFIG_USB_GADGET
 	&s3c_device_usbgadget,
+#endif
+#ifdef CONFIG_USB_ANDROID
+	&s3c_device_android_usb,
+#ifdef CONFIG_USB_ANDROID_MASS_STORAGE
+	&s3c_device_usb_mass_storage,
+#endif
+#ifdef CONFIG_USB_ANDROID_RNDIS
+	&s3c_device_rndis,
+#endif
+#endif
 #ifdef CONFIG_S3C_ADC
 	&s3c_device_adc,
 #endif
@@ -698,6 +709,8 @@ static void __init smdk6410_machine_init(void)
 	*/
 	smdk6410_usb_power(1);
 	//m8_gsm_power(1);
+
+	s3c_usb_set_serial();
 
 #if defined(CONFIG_SND_S3C_I2S_V32)
 	i2s_pin_init();

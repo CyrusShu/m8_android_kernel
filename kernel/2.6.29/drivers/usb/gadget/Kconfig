@@ -587,9 +587,10 @@ config USB_ZERO_HNPTEST
 config USB_ETH
 	tristate "Ethernet Gadget (with CDC Ethernet support)"
 	depends on NET
+	select CRC32
 	help
-	  This driver implements Ethernet style communication, in either
-	  of two ways:
+	  This driver implements Ethernet style communication, in one of
+	  several ways:
 	  
 	   - The "Communication Device Class" (CDC) Ethernet Control Model.
 	     That protocol is often avoided with pure Ethernet adapters, in
@@ -599,7 +600,11 @@ config USB_ETH
 	   - On hardware can't implement that protocol, a simple CDC subset
 	     is used, placing fewer demands on USB.
 
-	  RNDIS support is a third option, more demanding than that subset.
+	   - CDC Ethernet Emulation Model (EEM) is a newer standard that has
+	     a simpler interface that can be used by more USB hardware.
+
+	  RNDIS support is an additional option, more demanding than than
+	  subset.
 
 	  Within the USB device, this gadget driver exposes a network device
 	  "usbX", where X depends on what other networking devices you have.
@@ -689,12 +694,6 @@ config USB_G_SERIAL
 	  which includes instructions and a "driver info file" needed to
 	  make MS-Windows work with CDC ACM.
 
-config USB_DUN_SUPPORT
-	bool "ACM line state notification to support DUN"
-	depends on USB_G_SERIAL
-	default y
-	help
-
 config USB_MIDI_GADGET
 	tristate "MIDI Gadget (EXPERIMENTAL)"
 	depends on SND && EXPERIMENTAL
@@ -724,27 +723,47 @@ config USB_G_PRINTER
 	  For more information, see Documentation/usb/gadget_printer.txt
 	  which includes sample code for accessing the device file.
 
-config USB_ANDROID_ADB_UMS
-	bool "Android Composite(ADB + UMS) Gadget"
+config USB_ANDROID
+	boolean "Android Gadget"
 	depends on SWITCH
 	help
-	  The Android gadget provides mass storage and adb transport.
+	  The Android gadget driver supports multiple USB functions.
+	  The functions can be configured via a board file and may be
+	  enabled and disabled dynamically.
 
-	  Say "y" to link the driver statically, not support dynamically linked module
-
-config USB_ANDROID_ADB_UMS_ACM
-	bool "Android Composite(ADB + UMS + ACM) Gadget"
-	depends on SWITCH
+config USB_ANDROID_ACM
+	boolean "Android gadget ACM serial function"
+	depends on USB_ANDROID
 	help
-	  The Android gadget provides mass storage and adb transport and acm.
+	  Provides ACM serial function for android gadget driver.
 
-	  Say "y" to link the driver statically, not support dynamically linked module
-	  
-config USB_DUN_SUPPORT
-	bool "ACM line state notification to support DUN"
-	depends on USB_ANDROID_ADB_UMS_ACM
-	default y
+config USB_ANDROID_ADB
+	boolean "Android gadget adb function"
+	depends on USB_ANDROID
 	help
+	  Provides adb function for android gadget driver.
+
+config USB_ANDROID_MASS_STORAGE
+	boolean "Android gadget mass storage function"
+	depends on USB_ANDROID && SWITCH
+	help
+	  Provides USB mass storage function for android gadget driver.
+
+config USB_ANDROID_RNDIS
+	boolean "Android gadget RNDIS ethernet function"
+	depends on USB_ANDROID
+	help
+	  Provides RNDIS ethernet function for android gadget driver.
+
+config USB_ANDROID_RNDIS_WCEIS
+        boolean "Use Windows Internet Sharing Class/SubClass/Protocol"
+        depends on USB_ANDROID_RNDIS
+        help
+         Causes the driver to look like a Windows-compatible Internet
+         Sharing device, so Windows auto-detects it.
+
+         If you enable this option, the device is no longer CDC ethernet
+         compatible.
 
 config USB_CDC_COMPOSITE
 	tristate "CDC Composite Device (Ethernet and ACM)"
@@ -760,12 +779,6 @@ config USB_CDC_COMPOSITE
 	  Say "y" to link the driver statically, or "m" to build a
 	  dynamically linked module.
 
-config USB_DUN_SUPPORT
-	bool "ACM line state notification to support DUN"
-	depends on USB_CDC_COMPOSITE
-	default y
-	help
-	
 # put drivers that need isochronous transfer support (for audio
 # or video class gadget drivers), or specific hardware, here.
 
