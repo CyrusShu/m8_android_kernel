@@ -10,7 +10,7 @@ validmd5="c4681275d035fc778bb55b98425a0ef5"
 /bin/echo /sbin/mdev > /proc/sys/kernel/hotplug
 /sbin/mdev -s
 
-ifconfig usb0 192.168.1.100 255.255.255.0 up
+#ifconfig usb0 192.168.1.100 255.255.255.0 up
 
 #Display Logo
 /fbv --delay 10 /images/logo.png
@@ -49,7 +49,7 @@ fi
 if [ -e /mnt/disk/lbe_android/mroot.img ] && [ -e /mnt/disk/lbe_android/msys.img ] && [ -e /mnt/disk/lbe_android/mdata.img ] && [ "$validmd5" = "$curmd5" ]; then
     foundmdroid=1
     if [ $foundfsck -eq 1 ]; then
-        /mnt/disk/lbe_android/e2fsck -y /mnt/disk/lbe_android/mroot.img > /dev/tty1 2>&1
+        /mnt/disk/lbe_android/e2fsck -y /mnt/disk/lbe_android/mroot.img
     fi
     mount -o sync,dirsync /mnt/disk/lbe_android/mroot.img /mnt/looproot
     if [ $? -ne 0 ]; then
@@ -57,7 +57,7 @@ if [ -e /mnt/disk/lbe_android/mroot.img ] && [ -e /mnt/disk/lbe_android/msys.img
         foundmdroid=0
     fi
     if [ $foundfsck -eq 1 ]; then
-        /mnt/disk/lbe_android/e2fsck -y /mnt/disk/lbe_android/msys.img > /dev/tty1 2>&1
+        /mnt/disk/lbe_android/e2fsck -y /mnt/disk/lbe_android/msys.img
     fi
     mount -o sync,dirsync /mnt/disk/lbe_android/msys.img /mnt/looproot/system
     if [ $? -ne 0 ]; then
@@ -69,7 +69,7 @@ if [ -e /mnt/disk/lbe_android/mroot.img ] && [ -e /mnt/disk/lbe_android/msys.img
         foundmdroid=0
     fi
     if [ $foundfsck -eq 1 ]; then
-        /mnt/disk/lbe_android/e2fsck -y /mnt/disk/lbe_android/mdata.img > /dev/tty1 2>&1
+        /mnt/disk/lbe_android/e2fsck -y /mnt/disk/lbe_android/mdata.img
     fi
     mount -o sync,dirsync,nosuid /mnt/disk/lbe_android/mdata.img /mnt/looproot/data
     if [ $? -ne 0 ] || [ ! -f /mnt/looproot/data/A11 ]; then
@@ -81,7 +81,7 @@ if [ -e /mnt/disk/lbe_android/mroot.img ] && [ -e /mnt/disk/lbe_android/msys.img
 
     if [ -e /mnt/disk/lbe_android/mcache.img ]; then
         if [ $foundfsck -eq 1 ]; then
-            /mnt/disk/lbe_android/e2fsck -y /mnt/disk/lbe_android/mcache.img > /dev/tty1 2>&1
+            /mnt/disk/lbe_android/e2fsck -y /mnt/disk/lbe_android/mcache.img
         fi
         mount -o sync,dirsync,nosuid /mnt/disk/lbe_android/mcache.img /mnt/looproot/cache
     fi
