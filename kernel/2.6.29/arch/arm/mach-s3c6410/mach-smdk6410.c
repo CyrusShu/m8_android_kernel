@@ -1039,10 +1039,8 @@ void s3c_config_wakeup_source(void)
 
 	eint_mask = 	(1<<4)		/* Home Button */
 				| (1<<9)		/* Power Button */
-				| (1<<11)	/* Bluetooth */
 				| (1<<13)	/* USB */
-				| (1<<17)	/* RIL */
-				| (1<<19);	/* WIFI */
+				| (1<<17);	/* RIL */
 	if (bt_power || wifi_status)
 		eint_mask |= (1<<11)	/* Bluetooth(?) */
 				| (1<<19);	/* WIFI/BT */
