@@ -20,6 +20,7 @@
 #include <linux/mm.h>
 #include <linux/tty.h>
 #include <linux/slab.h>
+#include <linux/suspend.h>
 #include <linux/delay.h>
 #include <linux/fb.h>
 #include <linux/init.h>
@@ -43,6 +44,7 @@
  *  Globals
  */
 s3c_fb_info_t s3c_fb_info[S3C_FB_NUM];
+static int vt_switch;
 
 void s3cfb_set_lcd_power(int to)
 {
@@ -881,6 +883,8 @@ static int __init s3cfb_probe(struct platform_device *pdev)
 				goto dealloc_fb;
 		}
 
+		pm_set_vt_switch(vt_switch);
+
 		ret = register_framebuffer(&s3c_fb_info[index].fb);
 
 		if (ret < 0) {
@@ -993,6 +997,9 @@ static void __exit s3cfb_cleanup(void)
 
 module_init(s3cfb_init);
 module_exit(s3cfb_cleanup);
+
+module_param(vt_switch, int, 0);
+MODULE_PARM_DESC(vt_switch, "enable VT switch during suspend/resume");
 
 MODULE_AUTHOR("Jinsung Yang");
 MODULE_DESCRIPTION("S3C Framebuffer Driver");
