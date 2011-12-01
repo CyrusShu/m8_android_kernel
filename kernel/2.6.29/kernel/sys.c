@@ -282,10 +282,49 @@ void emergency_restart(void)
 }
 EXPORT_SYMBOL_GPL(emergency_restart);
 
+static void umount_fs_on_sdcard(void)
+{
+#ifdef CONFIG_MACH_SMDK6410 /* FIXME */
+	int retval;
+	mm_segment_t fs = get_fs();
+
+	set_fs(KERNEL_DS);
+
+	/* umount filesystems on sdcard */
+	sys_sync(); sys_sync(); sys_sync();
+	retval = sys_umount("/cache", MNT_FORCE);
+	printk("umount_fs_on_sdcard = %d\n", retval);
+	sys_sync(); sys_sync(); sys_sync();
+	retval = sys_umount("/data", MNT_FORCE);
+	printk("umount_fs_on_sdcard = %d\n", retval);
+	sys_sync(); sys_sync(); sys_sync();
+	retval = sys_umount("/system", MNT_FORCE);
+	printk("umount_fs_on_sdcard = %d\n", retval);
+	sys_sync(); sys_sync(); sys_sync();
+	retval = sys_umount("/mnt/looproot/cache", MNT_FORCE);
+	printk("umount_fs_on_sdcard = %d\n", retval);
+	sys_sync(); sys_sync(); sys_sync();
+	retval = sys_umount("/mnt/looproot/data", MNT_FORCE);
+	printk("umount_fs_on_sdcard = %d\n", retval);
+	sys_sync(); sys_sync(); sys_sync();
+	retval = sys_umount("/mnt/looproot/system", MNT_FORCE);
+	printk("umount_fs_on_sdcard = %d\n", retval);
+	sys_sync(); sys_sync(); sys_sync();
+	retval = sys_umount("/mnt/looproot", MNT_FORCE);
+	printk("umount_fs_on_sdcard = %d\n", retval);
+	sys_sync(); sys_sync(); sys_sync();
+	retval = sys_umount("/mnt/disk", MNT_FORCE);
+	printk("umount_fs_on_sdcard = %d\n", retval);
+
+	set_fs(fs);
+#endif
+}
+
 void kernel_restart_prepare(char *cmd)
 {
 	blocking_notifier_call_chain(&reboot_notifier_list, SYS_RESTART, cmd);
 	system_state = SYSTEM_RESTART;
+	umount_fs_on_sdcard();
 	device_shutdown();
 	sysdev_shutdown();
 }
@@ -314,6 +353,7 @@ static void kernel_shutdown_prepare(enum system_states state)
 	blocking_notifier_call_chain(&reboot_notifier_list,
 		(state == SYSTEM_HALT)?SYS_HALT:SYS_POWER_OFF, NULL);
 	system_state = state;
+	umount_fs_on_sdcard();
 	device_shutdown();
 }
 /**
