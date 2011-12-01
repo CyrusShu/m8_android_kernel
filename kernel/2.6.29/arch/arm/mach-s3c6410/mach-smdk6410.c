@@ -1026,10 +1026,14 @@ void s3c_config_wakeup_source(void)
 
 	set_irq_type(gpio_to_irq(S3C64XX_GPN(9)), IRQ_TYPE_EDGE_BOTH);
 	set_irq_type(gpio_to_irq(S3C64XX_GPN(4)), IRQ_TYPE_EDGE_BOTH);
-	set_irq_type(gpio_to_irq(S3C64XX_GPN(13)), IRQ_TYPE_EDGE_BOTH);
-	s3c_gpio_setpull(S3C64XX_GPN(13), S3C_GPIO_PULL_NONE);
 	set_irq_type(gpio_to_irq(S3C64XX_GPL(9)), IRQ_TYPE_EDGE_BOTH);
 	s3c_gpio_setpull(S3C64XX_GPL(9), S3C_GPIO_PULL_NONE);
+
+	set_irq_type(gpio_to_irq(S3C64XX_GPN(13)), IRQ_TYPE_EDGE_BOTH); /* USB */
+	s3c_gpio_setpull(S3C64XX_GPN(13), S3C_GPIO_PULL_NONE);
+	set_irq_type(gpio_to_irq(S3C64XX_GPN(3)), IRQ_TYPE_EDGE_BOTH); /* Power/Battery Fault */
+	s3c_gpio_setpull(S3C64XX_GPN(3), S3C_GPIO_PULL_NONE);
+
 	if (bt_power || wifi_status) {
 		set_irq_type(gpio_to_irq(S3C64XX_GPL(11)), IRQ_TYPE_EDGE_FALLING); /* EINT19, Wifi/BT */
 		s3c_gpio_setpull(S3C64XX_GPL(11), S3C_GPIO_PULL_NONE);
@@ -1040,6 +1044,7 @@ void s3c_config_wakeup_source(void)
 	eint_mask = 	(1<<4)		/* Home Button */
 				| (1<<9)		/* Power Button */
 				| (1<<13)	/* USB */
+				| (1<<3)		/* Power/Battery Fault */
 				| (1<<17);	/* RIL */
 	if (bt_power || wifi_status)
 		eint_mask |= (1<<11)	/* Bluetooth(?) */

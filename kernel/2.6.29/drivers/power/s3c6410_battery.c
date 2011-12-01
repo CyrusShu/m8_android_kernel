@@ -32,11 +32,10 @@
 #include "s3c6410_battery.h"
 
 static struct wake_lock vbus_wake_lock;
-static struct timer_list polling_timer;
-static struct work_struct bat_work;
 
 /* Prototypes */
 extern int s3c_adc_get_adc_data(int channel);
+extern int get_usb_power_state(void);
 
 static ssize_t s3c_bat_show_property(struct device *dev,
                                       struct device_attribute *attr,
@@ -44,6 +43,7 @@ static ssize_t s3c_bat_show_property(struct device *dev,
 static ssize_t s3c_bat_store(struct device *dev, 
 			     struct device_attribute *attr,
 			     const char *buf, size_t count);
+static void s3c_set_chg_en(int enable);
 
 const int vddtab [][3] = {
 // percent,AC on,AC off	
@@ -71,10 +71,22 @@ const int vddtab [][3] = {
 	{ 0,  3349 ,  3188}
 };
 
+#define POLLING_INTERVAL	30000     // old: 10000, original: 2000
+
+#define ENABLE		1
+#define DISABLE		0
+
+static struct work_struct bat_work;
+static struct work_struct cable_work;
 
 static struct device *dev;
+static struct timer_list polling_timer;
+static struct timer_list cable_timer;
+static int cable_intr_cnt = 0;
+
 static int s3c_battery_initial;
 static int force_update;
+static int full_charge_flag;
 
 static char *status_text[] = {
 	[POWER_SUPPLY_STATUS_UNKNOWN] =		"Unknown",
@@ -161,6 +173,16 @@ static int s3c_adc_sample()
 	return (batv);
 }
 
+static u32 s3c_get_bat_health(void)
+{
+	return s3c_bat_info.bat_info.batt_health;
+}
+
+static void s3c_set_bat_health(u32 batt_health)
+{
+	s3c_bat_info.bat_info.batt_health = batt_health;
+}
+
 static int s3c_get_bat_level(struct power_supply *bat_ps)
 {
 	int i;
@@ -212,13 +234,26 @@ static int s3c_get_bat_level(struct power_supply *bat_ps)
 static int s3c_get_bat_vol(struct power_supply *bat_ps)
 {
 	int bat_vol = 0;
+	int adc = s3c_bat_info.bat_info.batt_vol_adc;
+
+	bat_vol = convert_adc2voltage(adc);
+
+	dev_dbg(dev, "%s: adc = %d, bat_vol = %d\n",
+			__func__, adc, bat_vol);
 
 	return bat_vol;
 }
 
-static u32 s3c_get_bat_health(void)
+static void s3c_set_chg_en(int enable)
 {
-	return s3c_bat_info.bat_info.batt_health;
+	int chg_en_val = gpio_get_value(GPIO_TA_EN);
+
+	/* TODO?? */
+	if (enable) {
+	} else {
+	}
+	printk("GPIO_TA_EN = %d\n", chg_en_val);
+	s3c_bat_info.bat_info.charging_enabled = enable;
 }
 
 static int s3c_get_bat_temp(struct power_supply *bat_ps)
@@ -244,7 +279,7 @@ static int s3c_bat_get_charging_status(void)
                 if (s3c_bat_info.bat_info.level == 100 
 				&& s3c_bat_info.bat_info.batt_is_full) {
                         ret = POWER_SUPPLY_STATUS_FULL;
-		}else {
+		} else {
                         ret = POWER_SUPPLY_STATUS_CHARGING;
 		}
                 break;
@@ -515,7 +550,8 @@ static int s3c_cable_status_update(int status)
                 /* give userspace some time to see the uevent and update
                  * LED state or whatnot...
                  */
-                wake_lock_timeout(&vbus_wake_lock, HZ / 2);
+		//if (!gpio_get_value(GPIO_TA_CONNECTED_N)) 
+		wake_lock_timeout(&vbus_wake_lock, HZ / 2);
         }
 
         /* if the power source changes, all power supplies may change state */
@@ -541,7 +577,15 @@ static void s3c_bat_status_update(struct power_supply *bat_ps)
 	old_level = s3c_bat_info.bat_info.level; 
 	old_is_full = s3c_bat_info.bat_info.batt_is_full;
 	s3c_bat_info.bat_info.batt_temp = s3c_get_bat_temp(bat_ps);
+
 	s3c_bat_info.bat_info.level = s3c_get_bat_level(bat_ps);
+#if 0
+	if (!s3c_bat_info.bat_info.charging_enabled &&
+			!s3c_bat_info.bat_info.batt_is_full) {
+		if (s3c_bat_info.bat_info.level > old_level)
+			s3c_bat_info.bat_info.level = old_level;
+	}
+#endif
 	s3c_bat_info.bat_info.batt_vol = s3c_get_bat_vol(bat_ps);
 
 	if (old_level != s3c_bat_info.bat_info.level 
@@ -559,13 +603,62 @@ static void s3c_bat_status_update(struct power_supply *bat_ps)
 
 void s3c_cable_check_status(int flag)
 {
-    charger_type_t status = 0;
+	charger_type_t status = 0;
 
-    if (flag == 0)  // Battery
+#if 0
+	if (flag == 0)	// Battery
 		status = CHARGER_BATTERY;
-    else    // USB
-		status = CHARGER_USB;
-    s3c_cable_status_update(status);
+	 else	 // USB
+	 	status = CHARGER_USB;
+
+	s3c_cable_status_update(status);
+	return;
+#endif
+
+	if (flag == 0) /* FIXME: cable disconnected */
+		cable_intr_cnt = 0;
+
+	//mutex_lock(&work_lock);
+	printk("s3c_cable_check_status: GPIO_TA_CONNECTED_N=%d, GPIO_TA_EN=%d, S3C64XX_GPL(0)=%d\n", gpio_get_value(GPIO_TA_CONNECTED_N), gpio_get_value(GPIO_TA_EN), gpio_get_value(S3C64XX_GPL(0)));
+
+	//if (gpio_get_value(GPIO_TA_CONNECTED_N)) {
+	if (cable_intr_cnt) {
+		if (get_usb_power_state())
+			status = CHARGER_USB;
+		else
+			status = CHARGER_AC;
+
+#if 0
+		if (s3c_get_bat_health() != POWER_SUPPLY_HEALTH_GOOD) {
+			dev_info(dev, "%s: Unhealth battery state!\n", __func__);
+			s3c_set_chg_en(DISABLE);
+		} else 
+			s3c_set_chg_en(ENABLE);
+#endif
+
+		/*dev_dbg(dev, */printk("%s: status : %s\n", __func__, 
+				(status == CHARGER_USB) ? "USB" : "AC");
+	} else {
+		//status = CHARGER_BATTERY;
+		 if (flag == 1)	 // USB
+			status = CHARGER_USB;
+		 else if (flag == 2)	 // AC
+			status = CHARGER_AC;
+		 else	// Battery
+			status = CHARGER_BATTERY;
+
+#if 0
+		s3c_set_chg_en(DISABLE);
+
+		if (s3c_get_bat_health == POWER_SUPPLY_HEALTH_OVERHEAT ||
+				health == POWER_SUPPLY_HEALTH_COLD) {
+			s3c_set_bat_health(POWER_SUPPLY_HEALTH_GOOD);
+		}
+#endif
+	}
+
+	s3c_cable_status_update(status);
+	//mutex_unlock(&work_lock);
 }
 EXPORT_SYMBOL(s3c_cable_check_status);
 
@@ -577,28 +670,40 @@ static void s3c_bat_work(struct work_struct *work)
 			&s3c_power_supplies[CHARGER_BATTERY]);
 }
 
+static void s3c_cable_work(struct work_struct *work)
+{
+	dev_dbg(dev, "%s\n", __func__);
+	if (cable_intr_cnt)
+		s3c_cable_check_status(2);
+}
+
 #ifdef CONFIG_PM
 static int s3c_bat_suspend(struct platform_device *pdev, 
 		pm_message_t state)
 {
 	dev_info(dev, "%s\n", __func__);
 
-	del_timer_sync(&polling_timer);
+	if (s3c_bat_info.polling)
+		del_timer_sync(&polling_timer);
 
 	flush_scheduled_work();
-
+	disable_irq(IRQ_TA_CONNECTED_N);
+	disable_irq(IRQ_TA_CHG_N);
 	return 0;
 }
 
 static int s3c_bat_resume(struct platform_device *pdev)
 {
 	dev_info(dev, "%s\n", __func__);
-
+	/*wake_lock(&vbus_wake_lock);*/
+	enable_irq(IRQ_TA_CONNECTED_N);
+	enable_irq(IRQ_TA_CHG_N);
 	schedule_work(&bat_work);
+	schedule_work(&cable_work);
 
-	mod_timer(&polling_timer,
-		  jiffies + msecs_to_jiffies(10000));
-
+	if (s3c_bat_info.polling)
+		mod_timer(&polling_timer,
+			  jiffies + msecs_to_jiffies(s3c_bat_info.polling_interval));
 	return 0;
 }
 #else
@@ -606,12 +711,77 @@ static int s3c_bat_resume(struct platform_device *pdev)
 #define s3c_bat_resume NULL
 #endif /* CONFIG_PM */
 
-static void s3c_polling_func(unsigned long unused)
+static void polling_timer_func(unsigned long unused)
 {
+	dev_dbg(dev, "%s\n", __func__);
 	schedule_work(&bat_work);
 
 	mod_timer(&polling_timer,
-		  jiffies + msecs_to_jiffies(10000));
+		  jiffies + msecs_to_jiffies(s3c_bat_info.polling_interval));
+}
+
+static void cable_timer_func(unsigned long unused)
+{
+	dev_info(dev, "%s : intr cnt = %d\n", __func__, cable_intr_cnt);
+	//cable_intr_cnt = 0;
+	schedule_work(&cable_work);
+}
+
+static irqreturn_t s3c_cable_changed_isr(int irq, void *power_supply)
+{
+	/*dev_dbg(dev, */printk("%s: irq=0x%x, GPIO_TA_CONNECTED_N=%x\n", __func__, irq,
+			gpio_get_value(GPIO_TA_CONNECTED_N));
+
+	if (!s3c_battery_initial)
+		return IRQ_HANDLED;
+
+	s3c_bat_info.bat_info.batt_is_full = 0;
+
+	cable_intr_cnt++;
+	if (timer_pending(&cable_timer))
+		del_timer(&cable_timer);
+
+	cable_timer.expires = jiffies + msecs_to_jiffies(50);
+	add_timer(&cable_timer);
+
+	/*
+	 * Wait a bit before reading ac/usb line status and setting charger,
+	 * because ac/usb status readings may lag from irq.
+	 */
+	if (s3c_bat_info.polling)
+		mod_timer(&polling_timer,
+			  jiffies + msecs_to_jiffies(s3c_bat_info.polling_interval));
+
+	return IRQ_HANDLED;
+}
+
+static irqreturn_t s3c_cable_charging_isr(int irq, void *power_supply)
+{
+	int chg_ing = gpio_get_value(GPIO_TA_CHG_N);
+	/*dev_dbg(dev, */printk("%s: irq=0x%x, GPIO_TA_CHG_N=%d\n", __func__, irq, chg_ing);
+
+	if (!s3c_battery_initial)
+		return IRQ_HANDLED;
+#if 0
+	if (chg_ing && gpio_get_value(GPIO_TA_CONNECTED_N) &&
+			s3c_bat_info.bat_info.charging_enabled &&
+			s3c_get_bat_health() == POWER_SUPPLY_HEALTH_GOOD) {
+		s3c_set_chg_en(DISABLE);
+		s3c_bat_info.bat_info.batt_is_full = 1;
+		force_update = 1;
+		full_charge_flag = 1;
+	}
+#endif
+	schedule_work(&bat_work);
+	/*
+	 * Wait a bit before reading ac/usb line status and setting charger,
+	 * because ac/usb status readings may lag from irq.
+	 */
+	if (s3c_bat_info.polling)
+		mod_timer(&polling_timer,
+			  jiffies + msecs_to_jiffies(s3c_bat_info.polling_interval));
+
+	return IRQ_HANDLED;
 }
 
 static int __devinit s3c_bat_probe(struct platform_device *pdev)
@@ -623,6 +793,8 @@ static int __devinit s3c_bat_probe(struct platform_device *pdev)
 	dev_info(dev, "%s\n", __func__);
 
 	s3c_bat_info.present = 1;
+	s3c_bat_info.polling = 1;
+	s3c_bat_info.polling_interval = POLLING_INTERVAL;
 
 	s3c_bat_info.bat_info.batt_id = 0;
 	s3c_bat_info.bat_info.batt_vol = 0;
@@ -632,12 +804,13 @@ static int __devinit s3c_bat_probe(struct platform_device *pdev)
 	s3c_bat_info.bat_info.batt_temp_adc = 0;
 	s3c_bat_info.bat_info.batt_temp_adc_cal = 0;
 	s3c_bat_info.bat_info.batt_current = 0;
-	s3c_bat_info.bat_info.level = 0;
+	s3c_bat_info.bat_info.level = 100;
 	s3c_bat_info.bat_info.charging_source = CHARGER_BATTERY;
 	s3c_bat_info.bat_info.charging_enabled = 0;
 	s3c_bat_info.bat_info.batt_health = POWER_SUPPLY_HEALTH_GOOD;
 
 	INIT_WORK(&bat_work, s3c_bat_work);
+	INIT_WORK(&cable_work, s3c_cable_work);
 
 	/* init power supplier framework */
 	for (i = 0; i < ARRAY_SIZE(s3c_power_supplies); i++) {
@@ -653,12 +826,46 @@ static int __devinit s3c_bat_probe(struct platform_device *pdev)
 	/* create sec detail attributes */
 	s3c_bat_create_attrs(s3c_power_supplies[CHARGER_BATTERY].dev);
 
+	/* Request IRQ */ 
+	set_irq_type(IRQ_TA_CONNECTED_N, IRQ_TYPE_EDGE_BOTH);
+	ret = request_irq(IRQ_TA_CONNECTED_N, s3c_cable_changed_isr,
+			  IRQF_DISABLED,
+			  "usb-connected",
+			  &s3c_power_supplies[CHARGER_BATTERY]);
+	if (ret)
+		goto __end__;
+
+	set_irq_type(IRQ_TA_CHG_N, IRQ_TYPE_EDGE_BOTH);
+	ret = request_irq(IRQ_TA_CHG_N, s3c_cable_charging_isr,
+			  IRQF_DISABLED,
+			  DRIVER_NAME,
+			  &s3c_power_supplies[CHARGER_BATTERY]);
+	if (ret)
+		goto __ta_connected_irq_failed__;
+
+	if (s3c_bat_info.polling) {
+		dev_dbg(dev, "%s: will poll for status\n", 
+				__func__);
+		setup_timer(&polling_timer, polling_timer_func, 0);
+		mod_timer(&polling_timer,
+			  jiffies + msecs_to_jiffies(s3c_bat_info.polling_interval));
+	}
+
+	setup_timer(&cable_timer, cable_timer_func, 0);
+
 	s3c_battery_initial = 1;
 	force_update = 0;
+	full_charge_flag = 0;
 
-	setup_timer(&polling_timer, s3c_polling_func, 0);
-	mod_timer(&polling_timer, jiffies + msecs_to_jiffies(0));
+	s3c_bat_status_update(
+			&s3c_power_supplies[CHARGER_BATTERY]);
+	s3c_cable_check_status(0);
+
 __end__:
+	return ret;
+__ta_connected_irq_failed__:
+	free_irq(IRQ_TA_CONNECTED_N, 
+			&s3c_power_supplies[CHARGER_BATTERY]);
 	return ret;
 }
 
@@ -667,7 +874,12 @@ static int __devexit s3c_bat_remove(struct platform_device *pdev)
 	int i;
 	dev_info(dev, "%s\n", __func__);
 
-	del_timer_sync(&polling_timer);
+	if (s3c_bat_info.polling)
+		del_timer_sync(&polling_timer);
+
+	free_irq(IRQ_TA_CONNECTED_N, 
+			&s3c_power_supplies[CHARGER_BATTERY]);
+	free_irq(IRQ_TA_CHG_N, &s3c_power_supplies[CHARGER_BATTERY]);
 
 	for (i = 0; i < ARRAY_SIZE(s3c_power_supplies); i++) {
 		power_supply_unregister(&s3c_power_supplies[i]);
@@ -688,6 +900,21 @@ static struct platform_driver s3c_bat_driver = {
 /* Initailize GPIO */
 static void s3c_bat_init_hw(void)
 {
+	/*
+	 INT_USB EINT(13) GPN(13)	//GPIO_TA_CONNECTED_N
+	 POWER/BATFAULT EINT(3) GPN(3)	//GPIO_TA_CHG_N
+	 CHARG_START GPL(0) 	//GPIO_TA_EN???
+	*/
+	s3c_gpio_cfgpin(S3C64XX_GPN(13),  S3C64XX_GPN13_EINT13);
+	s3c_gpio_setpull(S3C64XX_GPN(13), S3C_GPIO_PULL_NONE);
+
+	s3c_gpio_cfgpin(S3C64XX_GPN(3), S3C64XX_GPN3_EINT3);
+	s3c_gpio_setpull(S3C64XX_GPN(3), S3C_GPIO_PULL_NONE);
+
+	s3c_gpio_cfgpin(S3C64XX_GPL(0), S3C64XX_GPL_INPUT(0));
+	s3c_gpio_setpull(S3C64XX_GPL(0), S3C_GPIO_PULL_UP);
+
+	printk("s3c_cable_check_status: GPIO_TA_CONNECTED_N=%d, GPIO_TA_EN=%d, S3C64XX_GPL(0)=%d\n", gpio_get_value(GPIO_TA_CONNECTED_N), gpio_get_value(GPIO_TA_EN), gpio_get_value(S3C64XX_GPL(0)));
 }
 
 static int __init s3c_bat_init(void)

@@ -22,6 +22,11 @@ typedef enum s3c_adc_channel {
 	ENDOFADC
 } adc_channel_type;
 
-#define GPIO_LEVEL_LOW                  0
-#define GPIO_LEVEL_HIGH                 1
-#define GPIO_LEVEL_NONE                 2
+#define GPIO_TA_CONNECTED_N 	S3C64XX_GPN(13)
+#define GPIO_TA_CHG_N		S3C64XX_GPN(3)
+#define GPIO_TA_EN		S3C64XX_GPL(0) /* ??? */
+
+#define IRQ_TA_CONNECTED_N	IRQ_EINT(13)
+#define IRQ_TA_CHG_N		IRQ_EINT(3)
+
+#define convert_adc2voltage(x)		((x - 2170) * 10 / 7 / 100 * 100 + 3200)

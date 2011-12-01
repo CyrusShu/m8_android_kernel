@@ -905,7 +905,13 @@ static void handle_suspend_intr(struct s3c_udc *dev)
 		dev->udc_state == USB_STATE_POWERED ||
 		dev->udc_state == USB_STATE_SUSPENDED )
 	{
-		//DEBUG_PM("[%s]: not proper state to go into the suspend mode\n", __FUNCTION__);
+		DEBUG_PM("[%s]: not proper state to go into the suspend mode\n", __FUNCTION__);
+#if defined (CONFIG_MACH_SMDK6410)
+		if (usb_power == 0) { // hack for cable disconnected when AC-charging
+			printk("udc_state = %d, AC cable disconnected??\n", dev->udc_state);
+			s3c_cable_check_status(0); 
+		}
+#endif /* CONFIG_MACH_SMDK6410 */
 		return;
 	}
 	
@@ -913,7 +919,7 @@ static void handle_suspend_intr(struct s3c_udc *dev)
 	
 	if ( !(usb_status & (1<<SUSPEND_STS)) )
 	{
-		//DEBUG_PM("[%s]: not suspend !~\n", __FUNCTION__);
+		DEBUG_PM("[%s]: not suspend !~\n", __FUNCTION__);
 		return;
 	}	
 

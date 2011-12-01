@@ -49,6 +49,14 @@
 
 #if defined (CONFIG_MACH_SMDK6410)
 
+static int usb_power = 0;
+
+int get_usb_power_state(void)
+{
+	return usb_power;
+}
+EXPORT_SYMBOL(get_usb_power_state);
+
 extern void s3c_cable_check_status(int flag);
 
 void s3c_udc_cable_connect(struct s3c_udc *dev)
@@ -57,6 +65,7 @@ void s3c_udc_cable_connect(struct s3c_udc *dev)
 		return;
 
 	printk("[%s] \n",__FUNCTION__);
+	usb_power = 1;
 
 	s3c_cable_check_status(1);
 
@@ -69,7 +78,8 @@ void s3c_udc_cable_disconnect(struct s3c_udc *dev)
 		return;
 
 	printk("[%s] \n",__FUNCTION__);
-	
+	usb_power = 0;
+
 	s3c_cable_check_status(0);
 	
 	dev->is_pm_lock = false;
