@@ -356,6 +356,7 @@ static struct i2c_board_info i2c_devs0_se[] __initdata = {
 	{ I2C_BOARD_INFO("ltc3555",0x09)},	/*M8 LTC3555 PMIC*/
 /*	{ I2C_BOARD_INFO("WM8580", 0x1b), },	*/
 	{ I2C_BOARD_INFO("st-lis302dl", 0x1d)}, 	/*支持lis302dl_misc sensor*/
+	{ I2C_BOARD_INFO("apds990x", 0x44), },	/* light/proximity sensor */
 	{ I2C_BOARD_INFO("wm8993", 0x1a), },
 };
 
@@ -364,6 +365,7 @@ static struct i2c_board_info i2c_devs0_fe[] __initdata = {
 	{ I2C_BOARD_INFO("ltc3555",0x09)},	/*M8 LTC3555 PMIC*/
 /*	{ I2C_BOARD_INFO("WM8580", 0x1b), },	*/
 	{ I2C_BOARD_INFO("st-lis302dl", 0x1d)}, 	/*支持lis302dl_misc sensor*/
+	{ I2C_BOARD_INFO("apds990x", 0x44), },	/* light/proximity sensor */
 	{ I2C_BOARD_INFO("wm8753", 0x1a), },
 };
 
