@@ -700,6 +700,14 @@ static void smdk6410_set_qos(void)
 	writel(0x8ff, S3C_VA_SYS + 0x838);
 }
 
+static void smdk6410_power_off(void)
+{
+	char *p = NULL;
+	printk(KERN_INFO "powering system down...\n");
+	p[0] = 'c'; /* making a panic... :-( */
+	/* FIXME: find out how to power down properly. */
+}
+
 static void __init smdk6410_machine_init(void)
 {
 	s3c_device_nand.dev.platform_data = &s3c_nand_mtd_part_info;
@@ -752,6 +760,7 @@ static void __init smdk6410_machine_init(void)
 	i2s_pin_init();
 #endif
 
+	pm_power_off = smdk6410_power_off;
 }
 
 MACHINE_START(SMDK6410, "SMDK6410")
