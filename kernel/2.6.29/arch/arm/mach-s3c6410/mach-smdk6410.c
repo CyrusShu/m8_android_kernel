@@ -1064,18 +1064,20 @@ void s3c_config_wakeup_source(void)
 	set_irq_type(gpio_to_irq(S3C64XX_GPN(4)), IRQ_TYPE_EDGE_BOTH);
 	set_irq_type(gpio_to_irq(S3C64XX_GPL(9)), IRQ_TYPE_EDGE_BOTH);
 	s3c_gpio_setpull(S3C64XX_GPL(9), S3C_GPIO_PULL_NONE);
+	udelay(50);
 
 	set_irq_type(gpio_to_irq(S3C64XX_GPN(13)), IRQ_TYPE_EDGE_BOTH); /* USB */
 	s3c_gpio_setpull(S3C64XX_GPN(13), S3C_GPIO_PULL_NONE);
+	udelay(50);
 	set_irq_type(gpio_to_irq(S3C64XX_GPN(3)), IRQ_TYPE_EDGE_BOTH); /* Power/Battery Fault */
 	s3c_gpio_setpull(S3C64XX_GPN(3), S3C_GPIO_PULL_NONE);
+	udelay(50);
 
 	if (bt_power || wifi_status) {
 		set_irq_type(gpio_to_irq(S3C64XX_GPL(11)), IRQ_TYPE_EDGE_FALLING); /* EINT19, Wifi/BT */
 		s3c_gpio_setpull(S3C64XX_GPL(11), S3C_GPIO_PULL_NONE);
+		udelay(50);
 	}
-
-	udelay(50);
 
 	eint_mask = 	(1<<4)		/* Home Button */
 				| (1<<9)		/* Power Button */
@@ -1088,6 +1090,8 @@ void s3c_config_wakeup_source(void)
 	__raw_writel(eint_mask, S3C64XX_EINT0PEND);
 	__raw_writel(0x0fffffff&~eint_mask, S3C64XX_EINT0MASK);
 	__raw_writel(0x0fffffff&~eint_mask, S3C_EINT_MASK);
+
+	udelay(50);
 
 	/* Alarm Wakeup Enable */
 	__raw_writel((__raw_readl(S3C_PWR_CFG) & ~(0x1 << 10)), S3C_PWR_CFG);
