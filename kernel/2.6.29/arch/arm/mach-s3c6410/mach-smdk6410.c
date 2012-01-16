@@ -67,6 +67,7 @@
 #include <plat/pm.h>
 #include <plat/pll.h>
 #include <plat/spi.h>
+#include <plat/sdhci.h>
 
 #include <linux/android_pmem.h>
 #include <linux/proc_fs.h>
@@ -411,9 +412,14 @@ void m8_gsm_power(int on) {
 /* WIFI/BT power on */
 #define GPIO_WB_PON	S3C64XX_GPD(0)
 #define GPIO_W3ON	S3C64XX_GPN(6)	/* WIFI power on?? */
+#define GPIO_RESETBL	S3C64XX_GPM(3) /* reset bluetooth?? */
+#define GPIO_RESET_SR	S3C64XX_GPL(7)	/* WIFI reset?? */
 
 static int m8_wifi_bt_power_cnt = 0;
 static DEFINE_MUTEX(m8_wifi_bt_power_lock);
+
+static int bt_power = 0;
+static int wifi_status = 0;
 
 static void m8_wifi_bt_power_inc(void)
 {
@@ -450,11 +456,6 @@ static void m8_wifi_bt_power_dec(void)
 	mutex_unlock(&m8_wifi_bt_power_lock);
 }
 
-/* reset bluetooth */
-#define GPIO_RESETBL		S3C64XX_GPM(3)
-
-int bt_power = 0;
-
 void m8_bt_power(int on, int sdio)
 {
 	printk("m8_bt_power %d, %d, %d\n", bt_power, on, sdio);
@@ -464,30 +465,32 @@ void m8_bt_power(int on, int sdio)
 	s3c_gpio_cfgpin(GPIO_RESETBL, S3C_GPIO_OUTPUT);
 	s3c_gpio_setpull(GPIO_RESETBL, S3C_GPIO_PULL_NONE);
 	if (sdio) {
-		s3c_gpio_setpull(S3C64XX_GPL(7), S3C_GPIO_OUTPUT);  /* is't true? */
-		s3c_gpio_setpull(S3C64XX_GPL(7), S3C_GPIO_PULL_NONE);
+		s3c_gpio_setpull(GPIO_RESET_SR, S3C_GPIO_OUTPUT);  /* is't true? */
+		s3c_gpio_setpull(GPIO_RESET_SR, S3C_GPIO_PULL_NONE);
 	}
 
 	if (on) {
-		gpio_set_value(GPIO_RESETBL, 0);
 		msleep(50);
 		m8_wifi_bt_power_inc();
 		if (sdio)
-			gpio_set_value(S3C64XX_GPL(7), 1);
+			gpio_set_value(GPIO_RESET_SR, 1);
 		gpio_set_value(GPIO_RESETBL, 1);
 	} else {
-		gpio_set_value(GPIO_RESETBL, 0);
 		m8_wifi_bt_power_dec();
 		if (sdio)
-			gpio_set_value(S3C64XX_GPL(7), 0);
+			gpio_set_value(GPIO_RESET_SR, 0);
+		gpio_set_value(GPIO_RESETBL, 0);
 	}
 
-	bt_power = on;
+	bt_power = !!on;
+
+	if (wifi_status)
+		return;
+
+	msleep(100);
+	if (sdio && m8_checkse())
+		sdhci_s3c_force_presence_change(&s3c_device_hsmmc0);
 }
-
-#define GPIO_RESET_SR	S3C64XX_GPL(7)	/* WIFI reset?? */
-
-int wifi_status = 0;
 
 void m8_wifi_power(int on)
 {
@@ -497,30 +500,61 @@ void m8_wifi_power(int on)
 	if (wifi_status == on)
 		return;
 
-	s3c_gpio_cfgpin(GPIO_RESET_SR, S3C_GPIO_OUTPUT);
-	s3c_gpio_setpull(GPIO_RESET_SR, S3C_GPIO_PULL_NONE);
 	if (is_m8se) {
-		s3c_gpio_setpull(S3C64XX_GPL(7), S3C_GPIO_OUTPUT); /* SDIO?? */
-		s3c_gpio_setpull(S3C64XX_GPL(7), S3C_GPIO_PULL_NONE);
+		s3c_gpio_cfgpin(GPIO_RESET_SR, S3C_GPIO_OUTPUT);
+		s3c_gpio_setpull(GPIO_RESET_SR, S3C_GPIO_PULL_NONE);
 	}
 
 	if (on) {
-		gpio_set_value(GPIO_RESET_SR, 0);
 		msleep(50);
 		m8_wifi_bt_power_inc();
 		if (is_m8se)
-			gpio_set_value(S3C64XX_GPL(7), 1);
-		gpio_set_value(GPIO_RESET_SR, 1);
+			gpio_set_value(GPIO_RESET_SR, 1);
 	} else {
-		gpio_set_value(GPIO_RESETBL, 0);
 		m8_wifi_bt_power_dec();
 		if (is_m8se)
-			gpio_set_value(S3C64XX_GPL(7), 0);
+			gpio_set_value(GPIO_RESET_SR, 0);
 	}
 
-	wifi_status = on;
+	wifi_status = !!on;
+
+	if (bt_power)
+		return;
+
+	msleep(100);
+	sdhci_s3c_force_presence_change(&s3c_device_hsmmc0);
 }
 EXPORT_SYMBOL(m8_wifi_power);
+
+int m8_get_wifi_bt_status(void)
+{
+	return (bt_power <<1) | wifi_status;
+}
+EXPORT_SYMBOL(m8_get_wifi_bt_status);
+
+static int m8_wifi_bt_irq_cnt = 0;
+
+void m8_wlan_bt_enable_irq(unsigned int irq)
+{
+	mutex_lock(&m8_wifi_bt_power_lock);
+
+	if (!(m8_wifi_bt_irq_cnt++))
+		enable_irq(irq);
+
+	mutex_unlock(&m8_wifi_bt_power_lock);
+}
+EXPORT_SYMBOL(m8_wlan_bt_enable_irq);
+
+void m8_wlan_bt_disable_irq(unsigned int irq)
+{
+	mutex_lock(&m8_wifi_bt_power_lock);
+
+	if (!(m8_wifi_bt_irq_cnt++))
+		disable_irq(irq);
+
+	mutex_unlock(&m8_wifi_bt_power_lock);
+}
+EXPORT_SYMBOL(m8_wlan_bt_disable_irq);
 
 /*
 *拉高GPK14,给usb上电
@@ -1049,8 +1083,7 @@ void s3c_config_wakeup_source(void)
 				| (1<<3)		/* Power/Battery Fault */
 				| (1<<17);	/* RIL */
 	if (bt_power || wifi_status)
-		eint_mask |= (1<<11)	/* Bluetooth(?) */
-				| (1<<19);	/* WIFI/BT */
+		eint_mask |= (1<<19);	/* WIFI/BT */
 
 	__raw_writel(eint_mask, S3C64XX_EINT0PEND);
 	__raw_writel(0x0fffffff&~eint_mask, S3C64XX_EINT0MASK);

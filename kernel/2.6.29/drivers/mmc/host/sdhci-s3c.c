@@ -26,6 +26,10 @@
 #include <linux/cpufreq.h>
 #include "sdhci.h"
 
+#ifdef CONFIG_MACH_SMDK6410
+#include <plat/s3c6410.h>
+#endif
+
 //#define SDHCI_S3C_ADMA_MODE
 
 #define MAX_BUS_CLK	(3)
@@ -480,16 +484,13 @@ static int __devexit sdhci_s3c_remove(struct platform_device *pdev)
 }
 
 #ifdef CONFIG_PM
-void m8_wifi_power(int on);
-void m8_bt_power(int on, int sdio);
-extern int wifi_status, bt_power;
+
 static int sdhci_s3c_suspend(struct platform_device *pdev, pm_message_t state)
 {
 	struct s3c_sdhci_platdata *pdata = pdev->dev.platform_data;
 	struct sdhci_host *s3c_host = pdata->sdhci_host;
 
 	sdhci_suspend_host(s3c_host, state);
-//	m8_wifi_power(0);
 
 	return 0;
 }
@@ -499,20 +500,24 @@ static int sdhci_s3c_resume(struct platform_device *pdev)
 	struct s3c_sdhci_platdata *pdata = pdev->dev.platform_data;
 	struct sdhci_host *s3c_host = pdata->sdhci_host;
 
+	printk("sdhci_s3c_resume\n");
 	sdhci_resume_host(s3c_host);
 
-	if ((s3c_host->hwport == 0) && (wifi_status == 1 || bt_power == 1))
+#ifdef CONFIG_MACH_SMDK6410
+	if ((s3c_host->hwport == 0) && m8_get_wifi_bt_status())
 	{
 		printk("Resume SDIO8688\n");
-		if (wifi_status) {
+		if (m8_get_wifi_bt_status() & WIFI_ON) {
 			m8_wifi_power(0);
 			m8_wifi_power(1);
-		} else if (bt_power) {
+		}
+		if (m8_get_wifi_bt_status() & BT_ON) {
 			m8_bt_power(0, 1);
 			m8_bt_power(1, 1);
 		}
-		sdhci_s3c_force_presence_change(pdev);
 	}
+#endif
+
 #ifdef CONFIG_CPU_FREQ
 	prev_hclk = hclk_max;
 #endif

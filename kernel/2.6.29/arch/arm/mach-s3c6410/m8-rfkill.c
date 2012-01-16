@@ -37,21 +37,11 @@
 #include <plat/irqs.h>
 
 #include <plat/s3c6410.h>
-#include <plat/devs.h>
-#include <plat/sdhci.h>
 
 #ifdef CONFIG_RFKILL
 
 extern void s3c_setup_uart_cfg_gpio(unsigned char port);
 extern void s3c_reset_uart_cfg_gpio(unsigned char port);
-
-//#define IRQ_BT_HOST_WAKE      IRQ_EINT(11)
-#define IRQ_WLAN_BT_HOST_WAKE      IRQ_EINT(19)
-
-//#define GPIO_WLAN_BT_EN		S3C64XX_GPK(1)
-//#define GPIO_BT_nRST			S3C64XX_GPM(3)
-//#define GPIO_BT_HOST_WAKE		S3C64XX_GPN(11)
-#define GPIO_WLAN_BT_HOST_WAKE		S3C64XX_GPL(11)
 
 static struct wake_lock rfkill_wake_lock;
 
@@ -68,22 +58,19 @@ static int bluetooth_set_power(void *data, enum rfkill_user_states state)
 {
 	int ret = 0;
 	int irq;
-	/* BT Host Wake IRQ */
+	/* WLAN/BT Host Wake IRQ */
 	irq = IRQ_WLAN_BT_HOST_WAKE;
 
 	switch (state) {
 
 	case RFKILL_USER_STATE_UNBLOCKED:
-		printk("[BT] Device Powering ON \n");//pr_debug
-
 		if (!loaded)
 			break;
 
+		printk("[BT] Device Powering ON \n");//pr_debug
+
 		/* Bluetooth over SDIO */
 		m8_bt_power(1, sdio);
-		msleep(100);
-		if (sdio && m8_checkse())
-			sdhci_s3c_force_presence_change(&s3c_device_hsmmc0);
 
 		msleep(100);
 		if (!sdio)
@@ -144,7 +131,7 @@ static int bluetooth_set_power(void *data, enum rfkill_user_states state)
 		//	pr_err("[BT] set wakeup src failed\n");
 #endif
 
-		enable_irq(irq);
+		m8_wlan_bt_enable_irq(irq);
 		break;
 
 	case RFKILL_USER_STATE_SOFT_BLOCKED:
@@ -155,9 +142,6 @@ static int bluetooth_set_power(void *data, enum rfkill_user_states state)
 
 		/* Bluetooth over SDIO */
 		m8_bt_power(0, sdio);
-		msleep(100);
-		if (sdio && m8_checkse())
-			sdhci_s3c_force_presence_change(&s3c_device_hsmmc0);
 
 		//if (!sdio)
 		//	s3c_reset_uart_cfg_gpio(1);
@@ -166,9 +150,8 @@ static int bluetooth_set_power(void *data, enum rfkill_user_states state)
 		//if (ret < 0)
 		//	pr_err("[BT] unset wakeup src failed\n");
 
-		disable_irq(irq);
-		wake_unlock(&rfkill_wake_lock);
-		printk("[BT] wake_unlock rfkill_wake_lock\n");
+		m8_wlan_bt_disable_irq(irq);
+		m8_wlan_bt_disable_wake_lock();
 
 #if 0 // UART
 		s3c_gpio_setpull(GPIO_BT_nRST, S3C_GPIO_PULL_NONE);
@@ -198,19 +181,40 @@ static int bluetooth_set_power(void *data, enum rfkill_user_states state)
 		printk(KERN_ERR "[BT] Bad bluetooth rfkill state %d\n", state);//pr_err
 	}
 
-	return 0;
+	return ret;
 }
 
-irqreturn_t bt_host_wake_irq_handler(int irq, void *dev_id)
+void m8_wlan_bt_enable_wake_lock(void)
 {
-	printk("[BT] bt_host_wake_irq_handler start\n");
+	if (!m8_get_wifi_bt_status())
+		return;
+
+	printk("[WLAN/BT] wake_lock rfkill_wake_lock\n");
+	wake_lock(&rfkill_wake_lock);
+}
+EXPORT_SYMBOL(m8_wlan_bt_enable_wake_lock);
+
+void m8_wlan_bt_disable_wake_lock(void)
+{
+	if (m8_get_wifi_bt_status())
+		return;
+
+	printk("[WLAN/BT] wake_unlock rfkill_wake_lock\n");
+	wake_unlock(&rfkill_wake_lock);
+}
+EXPORT_SYMBOL(m8_wlan_bt_disable_wake_lock);
+
+irqreturn_t wlan_bt_host_wake_irq_handler(int irq, void *dev_id)
+{
+	printk("[WLAN/BT] wlan_bt_host_wake_irq_handler start, GPIO_WLAN_BT_HOST_WAKE = %d\n", gpio_get_value(GPIO_WLAN_BT_HOST_WAKE));
 
 	if (gpio_get_value(GPIO_WLAN_BT_HOST_WAKE)) {
-		printk("[BT] wake_lock rfkill_wake_lock\n");
+		printk("[WLAN/BT] wlan_bt_host_wake_irq_handler: wake_lock rfkill_wake_lock\n");
 		wake_lock(&rfkill_wake_lock);
-	}
-	else
+	} else {
+		printk("[WLAN/BT] wlan_bt_host_wake_irq_handler: wake_lock_timeout rfkill_wake_lock\n");
 		wake_lock_timeout(&rfkill_wake_lock, HZ);
+	}
 
 	return IRQ_HANDLED;
 }
@@ -236,7 +240,7 @@ static int __init m8_rfkill_probe(struct platform_device *pdev)
 	int ret;
 
 	/* Initialize wake locks */
-	wake_lock_init(&rfkill_wake_lock, WAKE_LOCK_SUSPEND, "bt_host_wake");
+	wake_lock_init(&rfkill_wake_lock, WAKE_LOCK_SUSPEND, "wlan_bt_host_wake");
 
 #if 0
 	ret = gpio_request(GPIO_WLAN_BT_EN, "GPK");
@@ -255,12 +259,12 @@ static int __init m8_rfkill_probe(struct platform_device *pdev)
 	/* BT Host Wake IRQ */
 	irq = IRQ_WLAN_BT_HOST_WAKE;
 
-	ret = request_irq(irq, bt_host_wake_irq_handler,
+	ret = request_irq(irq, wlan_bt_host_wake_irq_handler,
 			IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
-			"bt_host_wake_irq_handler", NULL);
+			"wlan_bt_host_wake_irq", NULL);
 
 	if (ret < 0) {
-		pr_err("[BT] Request_irq failed\n");
+		pr_err("[WLAN/BT] request_irq failed\n");
 		goto err_req_irq;
 	}
 
