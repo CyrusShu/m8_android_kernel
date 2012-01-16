@@ -42,9 +42,10 @@
 #include "cmd.h"
 #include "if_sdio.h"
 
+#ifdef CONFIG_MACH_SMDK6410
+#include <mach/gpio.h>
 #include <plat/s3c6410.h>
-#include <plat/devs.h>
-#include <plat/sdhci.h>
+#endif
 
 /* The if_sdio_remove() callback function is called when
  * user removes this module from kernel space or ejects
@@ -941,6 +942,9 @@ static int if_sdio_probe(struct sdio_func *func,
 	unsigned int model;
 	struct if_sdio_packet *packet;
 
+	lbs_pr_info("vendor=0x%x, device=0x%x, class=%d, fn=%d\n",
+			id->vendor, id->device, id->class, func->num);
+
 	lbs_deb_enter(LBS_DEB_SDIO);
 
 	for (i = 0;i < func->card->num_info;i++) {
@@ -1105,6 +1109,15 @@ static int if_sdio_probe(struct sdio_func *func,
 out:
 	lbs_deb_leave_args(LBS_DEB_SDIO, "ret %d", ret);
 
+#ifdef CONFIG_MACH_SMDK6410
+	priv->wol_gpio = GPIO_WLAN_BT_HOST_WAKE;
+	priv->wol_gap = 0xff;
+	/*lbs_host_sleep_cfg(priv, EHS_WAKE_ON_UNICAST_DATA,
+				(struct wol_config *) NULL);*/
+
+	m8_wlan_bt_enable_irq(IRQ_WLAN_BT_HOST_WAKE);
+#endif
+
 	return ret;
 
 err_activate_card:
@@ -1178,6 +1191,10 @@ static void if_sdio_remove(struct sdio_func *func)
 
 	kfree(card);
 
+#ifdef CONFIG_MACH_SMDK6410
+	m8_wlan_bt_disable_irq(IRQ_WLAN_BT_HOST_WAKE);
+#endif
+
 	lbs_deb_leave(LBS_DEB_SDIO);
 }
 
@@ -1188,7 +1205,9 @@ static int if_sdio_suspend(struct device *dev)
 {
 	struct sdio_func *func = dev_to_sdio_func(dev);
 	struct if_sdio_card *card = sdio_get_drvdata(func);
-
+	struct lbs_private *priv = card->priv;
+	printk("if_sdio_suspend\n");
+	lbs_suspend(priv);
 	return 0;
 }
 
@@ -1196,6 +1215,7 @@ static int if_sdio_resume(struct device *dev)
 {
 	struct sdio_func *func = dev_to_sdio_func(dev);
 	struct if_sdio_card *card = sdio_get_drvdata(func);
+	printk("lbs_resume\n");
 	lbs_resume(card->priv);
 	return 0;
 }
@@ -1210,9 +1230,11 @@ static struct sdio_driver if_sdio_driver = {
 	.id_table	= if_sdio_ids,
 	.probe		= if_sdio_probe,
 	.remove		= if_sdio_remove,
+#ifdef CONFIG_PM
 //	.drv = {
 //		.pm = &if_sdio_pm_ops,
 //	},
+#endif   /* CONFIG_PM */
 };
 
 /*******************************************************************/
@@ -1230,9 +1252,10 @@ static int __init if_sdio_init_module(void)
 
 	ret = sdio_register_driver(&if_sdio_driver);
 
+#ifdef CONFIG_MACH_SMDK6410
 	m8_wifi_power(1);
-	msleep(100);
-	sdhci_s3c_force_presence_change(&s3c_device_hsmmc0);
+	m8_wlan_bt_enable_wake_lock();
+#endif
 
 	/* Clear the flag in case user removes the card. */
 	user_rmmod = 0;
@@ -1248,12 +1271,17 @@ static void __exit if_sdio_exit_module(void)
 
 	/* Set the flag as user is removing this module. */
 	user_rmmod = 1;
+#ifdef CONFIG_MACH_SMDK6410
+	if (m8_get_wifi_bt_status() & BT_ON);
+		user_rmmod = 0;
+#endif
 
 	sdio_unregister_driver(&if_sdio_driver);
 
+#ifdef CONFIG_MACH_SMDK6410
 	m8_wifi_power(0);
-	msleep(100);
-	sdhci_s3c_force_presence_change(&s3c_device_hsmmc0);
+	m8_wlan_bt_disable_wake_lock();
+#endif
 
 	lbs_deb_leave(LBS_DEB_SDIO);
 }
