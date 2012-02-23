@@ -23,6 +23,8 @@
 #include <linux/input.h>
 #include <linux/gpio_keys.h>
 
+#include <asm/uaccess.h>
+
 #include <asm/gpio.h>
 #include <plat/gpio-cfg.h>
 
@@ -47,12 +49,35 @@ struct gpio_keys_drvdata *ddata;
 
 static int can_combine = 0;
 static int has_combine = 0;
+static int downkey_times = 0;
+static int powerkey_times = 0;
 
 static void add_fake_keys_capability(struct input_dev *input)
 {
 	input_set_capability(input, EV_KEY, KEY_VOLUMEDOWN);
 	input_set_capability(input, EV_KEY, KEY_VOLUMEUP);
 	input_set_capability(input, EV_KEY, KEY_SEARCH);
+}
+
+static void fake_fast_restart(void)
+{
+	struct task_struct *p;
+	struct file *filp;
+
+	write_lock(&tasklist_lock);	/* block fork */
+	for_each_process(p) {
+		if (p->mm && !is_global_init(p))
+			/* Not swapper, init nor kernel thread */
+			force_sig(SIGTERM, p);
+	}
+	write_unlock(&tasklist_lock);
+
+	/* play a vibrator */
+	filp = filp_open("/sys/class/timed_output/vibrator/enable", O_WRONLY, 0);
+	if (!IS_ERR(filp) && filp) {
+		vfs_write(filp, (char __user *)"1000", 4, &filp->f_pos); /* 1000ms */
+		filp_close(filp, NULL);
+	}
 }
 
 static void gpio_keys_report_event(struct gpio_button_data *bdata)
@@ -93,6 +118,28 @@ static void gpio_keys_report_event(struct gpio_button_data *bdata)
 	case VOLUME_DOWN_KEYCODE:
 	case VOLUME_UP_KEYCODE:
 	case POWER_KEYCODE:
+		if (state == 1) {
+			if (keycode == VOLUME_DOWN_KEYCODE)
+				downkey_times++;
+			else if (keycode == POWER_KEYCODE)
+				powerkey_times++;
+			else
+				downkey_times = powerkey_times = 0;
+
+			if ((downkey_times > 10) && (powerkey_times > 10)) { /* about 5(+)s */
+				printk("fast restart: force to kill all processes, trick keys times %d, %d\n", downkey_times, powerkey_times);
+				fake_fast_restart();
+				downkey_times = powerkey_times = 0;
+			}
+		} else {
+			if (keycode == VOLUME_DOWN_KEYCODE)
+				downkey_times--;
+			else if (keycode == POWER_KEYCODE)
+				powerkey_times--;
+			else
+				downkey_times = powerkey_times = 0;
+		}
+
 		if (can_combine > 0 || has_combine) {
 			if (keycode == VOLUME_DOWN_KEYCODE)
 				keycode = KEY_VOLUMEDOWN;
