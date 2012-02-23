@@ -34,6 +34,7 @@
 #include <linux/seccomp.h>
 #include <linux/cpu.h>
 #include <linux/ptrace.h>
+#include <linux/delay.h>
 
 #include <linux/compat.h>
 #include <linux/syscalls.h>
@@ -285,38 +286,49 @@ EXPORT_SYMBOL_GPL(emergency_restart);
 static void umount_fs_on_sdcard(void)
 {
 #ifdef CONFIG_MACH_SMDK6410 /* FIXME */
+	struct task_struct *p;
+	int times;
 	int retval;
 	mm_segment_t fs = get_fs();
+	extern int skip_umount_capable_check;
+	extern int emergency_remount_done;
+	emergency_remount_done = 0;
 
 	set_fs(KERNEL_DS);
 
 	/* umount filesystems on sdcard */
-	sys_sync(); sys_sync(); sys_sync();
-	retval = sys_umount("/cache", MNT_FORCE);
-	printk("umount_fs_on_sdcard = %d\n", retval);
-	sys_sync(); sys_sync(); sys_sync();
-	retval = sys_umount("/data", MNT_FORCE);
-	printk("umount_fs_on_sdcard = %d\n", retval);
-	sys_sync(); sys_sync(); sys_sync();
-	retval = sys_umount("/system", MNT_FORCE);
-	printk("umount_fs_on_sdcard = %d\n", retval);
-	sys_sync(); sys_sync(); sys_sync();
-	retval = sys_umount("/mnt/looproot/cache", MNT_FORCE);
-	printk("umount_fs_on_sdcard = %d\n", retval);
-	sys_sync(); sys_sync(); sys_sync();
-	retval = sys_umount("/mnt/looproot/data", MNT_FORCE);
-	printk("umount_fs_on_sdcard = %d\n", retval);
-	sys_sync(); sys_sync(); sys_sync();
-	retval = sys_umount("/mnt/looproot/system", MNT_FORCE);
-	printk("umount_fs_on_sdcard = %d\n", retval);
-	sys_sync(); sys_sync(); sys_sync();
-	retval = sys_umount("/mnt/looproot", MNT_FORCE);
-	printk("umount_fs_on_sdcard = %d\n", retval);
-	sys_sync(); sys_sync(); sys_sync();
-	retval = sys_umount("/mnt/disk", MNT_FORCE);
-	printk("umount_fs_on_sdcard = %d\n", retval);
+#define DO_UMOUNT_FS(DIR) \
+	times = 10; \
+	do { \
+		sys_sync(); sys_sync(); sys_sync(); \
+		retval = sys_umount(DIR, MNT_FORCE); \
+		msleep(100); \
+		printk("umount_fs_on_sdcard "DIR"= %d\n", retval); \
+	} while ((retval != 0) && (retval != -EBUSY) && (times--))
+
+	skip_umount_capable_check = 1;
+	write_lock(&tasklist_lock);	/* block fork */
+	printk("kill all android user processes, uid > 10000(app_0)\n");
+	for_each_process(p) {
+	if (p->mm && !is_global_init(p) && task_uid(p) > 10000)
+		force_sig(SIGTERM, p);
+	}
+	DO_UMOUNT_FS("/cache");
+	DO_UMOUNT_FS("/data");
+	DO_UMOUNT_FS("/system");
+	write_unlock(&tasklist_lock);
+	skip_umount_capable_check = 0;
+#undef DO_UMOUNT_FS
 
 	set_fs(fs);
+
+	/* Remounting others filesystems read-only */
+	times = 50;
+	do {
+		sys_sync(); sys_sync(); sys_sync();
+		emergency_remount();
+		msleep(100);
+	} while (!emergency_remount_done && (times--));
 #endif
 }
 

@@ -1129,7 +1129,7 @@ static int do_umount(struct vfsmount *mnt, int flags)
  * We now support a flag for forced unmount like the other 'big iron'
  * unixes. Our API is identical to OSF/1 to avoid making a mess of AMD
  */
-
+int skip_umount_capable_check = 0;
 SYSCALL_DEFINE2(umount, char __user *, name, int, flags)
 {
 	struct path path;
@@ -1145,7 +1145,7 @@ SYSCALL_DEFINE2(umount, char __user *, name, int, flags)
 		goto dput_and_out;
 
 	retval = -EPERM;
-	if (!capable(CAP_SYS_ADMIN))
+	if (!capable(CAP_SYS_ADMIN) && !skip_umount_capable_check)
 		goto dput_and_out;
 
 	retval = do_umount(path.mnt, flags);

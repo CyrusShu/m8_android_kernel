@@ -674,9 +674,11 @@ int do_remount_sb(struct super_block *sb, int flags, void *data, int force)
 	return 0;
 }
 
+int emergency_remount_done;
 static void do_emergency_remount(unsigned long foo)
 {
 	struct super_block *sb;
+	int ret, count = 0;
 
 	spin_lock(&sb_lock);
 	list_for_each_entry(sb, &super_blocks, s_list) {
@@ -690,14 +692,19 @@ static void do_emergency_remount(unsigned long foo)
 			 * What lock protects sb->s_flags??
 			 */
 			lock_kernel();
-			do_remount_sb(sb, MS_RDONLY, NULL, 1);
+			ret = do_remount_sb(sb, MS_RDONLY, NULL, 1);
+			if (ret)
+				count++;
 			unlock_kernel();
 		}
 		drop_super(sb);
 		spin_lock(&sb_lock);
 	}
 	spin_unlock(&sb_lock);
-	printk("Emergency Remount complete\n");
+
+	if (!count)
+		emergency_remount_done = 1;
+	printk("Emergency Remount complete, emergency_remount_done = %d\n", emergency_remount_done);
 }
 
 void emergency_remount(void)
