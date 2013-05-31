@@ -9,7 +9,8 @@ add by cyrus 20130531
 1 arm-eabi-gcc 4.4.3 版本编译会出错，使用官方推荐4.6，则ok，地址在
 git clone https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-eabi-4.6 ,修改.crosscompile 文件内容定位编译器路径。
 
-2 make menuconfig
+2 cd kernel/2.6.29
+  make menuconfig
 
 这里可以设置一些内核配置文件
 
